@@ -277,7 +277,7 @@ Connects 16 tools to any MCP-compatible host.
 
 ## 🔗 Quick Links
 
-- **ClawHub**: https://clawhub.ai/skills/agentbridge
+- **ClawHub**: https://clawhub.ai/alexandre-leng/agentbridge
 - **npm**: `npm install -g browser-agentbridge-ai`
 - **GitHub**: https://github.com/alexandre-leng/Agent-Browser-Bridge-AI
 - **Author**: Alexandre Leng (@alexandre-leng)
