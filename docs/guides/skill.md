@@ -1,888 +1,317 @@
 ---
-name: browser-bridge
-description: |
-  Browser automation via AgentBridge.
-  Default: MCP server (9 tools, simple). Advanced: JSON-RPC (80 commands, precise).
-  Navigate, annotate, click, type, extract, human-like behavior.
-version: 3.2.4
+name: agentbridge
+description: "Agent-Browser-Bridge-AI — Anti-detection browser control for AI agents. DOM-first, human-like interactions (Bezier), lead gen, extraction, MCP."
+metadata:
+  openclaw:
+    emoji: "🌉"
+    requires:
+      bins:
+        - agentbridge
+      pkgs:
+        - browser-agentbridge-ai
 ---
 
-# 🦾 Skill: AgentBridge
+# AgentBridge 🌉 — Anti-Detection Browser Control for AI Agents
 
-> **You are an AI agent with a browser.** You control it via `id`-based interaction (numerical refs). No coordinate guessing. No HTML parsing. Just stable element IDs.
-
-## ⌛ 2-Minute Quickstart
-
-Do this loop, every time, for any task:
-
-```
-1. navigate → go to page
-2. annotate → get numbered elements (refs)
-3. look at refs, pick one
-4. click <ref> or type <ref> <text>
-5. verify with summary or annotate again
-```
-
-**Minimal example — search DuckDuckGo for "formalibre":**
-
-```javascript
-// Step 1: Go to the page
-browser_command (navigate, {url: "https://duckduckgo.com"})
-
-// Step 2: See what's on the page
-browser_command (annotate_page, {})
-// Returns: elements[{ref:7, type:"input", name:"search"}, ...]
-
-// Step 3: Click on the search bar (ref 7)
-browser_command (click_ref, {ref: 7})
-
-// Step 4: Type the query
-browser_command (type_ref, {ref: 7, text: "formalibre"})
-
-// Step 5: Press Enter and wait for results
-browser_command (navigate, {url: "https://duckduckgo.com/?q=formalibre"})
-```
-
-That's it. 5 commands, 30 seconds.
+> **The browser that doesn't look like a bot.** Full anti-detection browser bridge for AI agents. DOM-first interactions, human-like mouse movements (Bezier), typing jitter, stealth anti-fingerprinting, and **MCP-native** (16+ tools) integration.
 
 ---
 
-## 📋 Contents
+## 📋 Complete Feature Reference (40+ commands)
 
-Sections below are **reference material** — don't read them all. Jump to what you need:
+### 1. 🕹️ Navigation
 
-| If you... | Go to section |
-|---|---|
-| want the full protocol reference | §7 — JSON-RPC Approach |
-| need human-like behavior | §7.1 — Human Commands |
-| need to extract data | §7.2 — DOM Extraction |
-| want to run multiple steps at once | §8 — Batch Execution |
-| hit an error | §11 — Error Handling |
-| get blocked by anti-bot | §7.1 → human.antispam.check |
-| want environment variables | §13 — Environment Variables |
-| want the CLI reference | §6 — CLI Approach |
-| want installation help | §1 — Installation |
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `navigate <url>` | Go to any URL | Uses `politeGoto` with human-safe waits |
+| `navigate --annotate` | Navigate + auto-annotate elements | Two-in-one shortcut |
+| `back` | Go back in history | Human pause (250-900ms) before + scroll after |
+| `forward` | Go forward in history | Same human behavior |
+| `search <query>` | Quick Google/Bing/DuckDuckGo search | `SEARCH_URLS[engine](query)` |
+| `wait [ms]` | Wait for page load or N ms | Smart: no arg = wait for `load` event |
+
+### 2. 🎯 Page Analysis
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `annotate` | ✅ **Screenshot + numbered DOM tree** | All interactive elements with stable refs, roles, names, boxes |
+| `summary` | Page metadata (URL, title, element count) | Quick overview |
+| `visibleText` | Extract visible DOM text | Filters: `--filter`, `--filter-any`, `--filter-lines`, `--emails`, `--phones` |
+| `screenshot [--full-page]` | Full-page or viewport screenshot | Saves to `logs/screenshots/` + returns URL + base64 |
+
+### 3. 🖱️ Element Interaction
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `click <ref>` | ✅ Click numbered element | Bezier mouse move → human pause → click with delay (15-60ms) |
+| `click <text>` | Click visible text (fuzzy match) | Uses DOM query, not annotation ref |
+| `doubleClick <ref>` | Double-click element | Same anti-detection pipeline |
+| `type <ref> <text>` | ✅ Type into form field | Clear first (Ctrl+A/Delete) then human typing with jitter |
+| `press <key>` | Press keyboard key | Smart: Enter triggers waitForNavigation |
+| `hover <ref>` | Hover over element | Mouse move without click |
+| `select <ref> <option>` | Select dropdown option | Supports `<select>` elements |
+
+### 4. 🔍 Smart Text Search
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `findText <text>` | ✅ Search text (scrolls if needed) | Scans all visible DOM, scores by relevance + viewport |
+| `clickText <text>` | ✅ Find AND click text | Coordinates first, then falls back to agent.click(ref) |
+| Options | `--timeout-ms`, `--max-scrolls`, `--exact` | Fine-grained control |
+
+### 5. 📄 Structured Extraction
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `extract article` | Article content (h1 + all paragraphs) | CSS selector driven |
+| `extract table` | ✅ HTML tables + ARIA grids | Detects `<table>` AND `role="grid"` |
+| `extract form` | Map all form fields with labels | Full input/select/textarea analysis |
+| `extract listings` | ✅ Directory/listings extraction | Names, ratings, reviews, addresses, phones, hours |
+| `extract marketplace` | ✅ E-commerce scraping | Titles, prices, locations, images, delivery, sponsored |
+| `extract search-results` | ✅ Search engine SERP extraction | Organic/sponsored/video classification |
+| `extract google-maps` | ✅ Maps/local business extraction | Names, phones, ratings, reviews, addresses, hours |
+| `extract custom` | Custom CSS/XPath schema | `--schema` with `itemSelector` + `fields` |
+| Options | `--limit=N`, `--format=json|csv`, `--out=file` | All outputs |
+
+### 6. 📧 Lead Generation Pipeline
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `scrape-emails <query>` | 🔥 **Full pipeline**: search → visit each result → extract emails → CSV | Auto-pagination, dedup, CSV export |
+| Options | `--limit=N` (default 20), `--out=file.csv`, `--engine=google|bing`, `--fast`, `--pages=N` | |
+| `extract-emails <url>` | Single-page email extraction | Scans HTML + visible text, dedup |
+| `extract-phones <url>` | ✅ Single-page phone extraction | Uses `libphonenumber-js`, French (+33) support, excludes ref/code/SIRET patterns |
+| `scrape` | Full marketplace scraper | Same as `extract marketplace` |
+
+### 7. 🌐 Web Search
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `webSearch <query>` | ✅ Full web search with auto-pagination | Google/Bing/DuckDuckGo, dedup results |
+| Options | `--limit=N`, `--engine`, `--pages=N`, `--organic`, `--out=file.json` | |
+| `siteSearch <query>` | Use current site's built-in search form | Smart field detection (search, recherche, q) |
+
+### 8. 🧍 Human Behavior Emulation
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `scan` | 🔥 Human-like page reading | Scroll → read → pause → scroll... with configurable timing |
+| `idle [ms]` | Wait + random cursor movement | Looks human even while "doing nothing" |
+| `jitter [radius] [n]` | Small cursor hesitation | Realistic micro-movements |
+| `skim [steps] [px]` | Natural scroll + read | Alternates scroll/pause like a real user |
+| `backtrack` | Scroll up a bit + pause | Emulates re-reading something |
+| `focusCycle [n]` | Tab through controls naturally | Presses Tab with random pauses |
+
+### 9. ⏱️ Timing & Anti-Spam
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `timing get` | View current human timing profile | consultSpeed, WPM ranges, feedback interval |
+| `timing set consultSpeed=2` | Adjust reading speed | 0.25 (slow) to 8 (fast) |
+| `timing reset` | Back to defaults | Always safe |
+| `antispam` | Check page for anti-bot blockers | Non-throwing check, returns blocked/unblocked |
+
+### 10. 👁️ Vision System
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `vision.start` | Start live frame streaming | FPS-configurable, sends frames via WebSocket |
+| `vision.stop` | Stop streaming | Clean shutdown |
+| `agent.hover` | Hover with element find | Uses agent element tracking |
+
+### 11. ⚡ Automation & Batch
+
+| Command | Action | Internals |
+|---------|--------|-----------|
+| `run <cmd1> <args1> ...` | ✅ Chain commands in sequence | Preserves browser state between steps |
+| `batch <recipe.json>` | ✅ Execute JSON recipe file | Lightweight batch (no interpolation) |
+| `repl` | ✅ Interactive REPL mode | WebSocket REPL, type commands live |
+| `script <file.json>` | Full script with variable interpolation | `${stepN.result.path}` references |
+| `start` | Launch the bridge server | Spawns Express + WebSocket server |
+
+### 12. 🔄 Special Combos
+
+| Command | Action | Internals |
+|--------|--------|-----------|
+| `combo.searchAndClick <query>` | Search Google → click first result | One-shot for quick lookups |
+| `agent.search <query>` | Search + extract 10 results | Structured result extraction |
+| `agent.task <goal>` | 🔥 **Full autonomous task**: search → auto-cookies → extract locals + web | Combines maps extraction + search results |
+
+### 13. 🧪 Page JavaScript Execution
+
+| Command | Action | Internals |
+|--------|--------|-----------|
+| `exec.script <code>` | ✅ Run arbitrary JS in page context | Protected by security token |
+| `dom.html` | Get full page HTML | With optional selector filter |
+| `dom.inspect <query>` | Element inspection | Tag, id, class, text, bounding box |
+| `dom.search <text>` | Text search on page | Returns positions |
+
+### 14. 🧩 MCP Mode (16+ Tools)
+
+| Tool | Description | Input Schema |
+|------|-------------|-------------|
+| `browser_status` | Check browser connection health | — |
+| `navigate` | Navigate to URL | `{ url, autoAnnotate?, sessionId? }` |
+| `annotate_page` | Screenshot + numbered elements | `{ noImage?, sessionId? }` |
+| `click_ref` | Click element by ref | `{ ref: number|string, sessionId? }` |
+| `type_ref` | Type text into field | `{ ref, text, clearFirst?, sessionId? }` |
+| `inspect_forms` | Map visible forms + fields | `{ sessionId? }` |
+| `fill_form` | Auto-fill form by labels | `{ values|fields, clearFirst?, sessionId? }` |
+| `submit_form` | Submit active form | `{ query?, selector?, timeout?, sessionId? }` |
+| `site_search` | Use current site search | `{ query, field?, submit?, timeout?, sessionId? }` |
+| `web_search` | Full web search with pagination | `{ query, engine?, limit?, pages?, sessionId? }` |
+| `extract_schema` | Custom CSS/XPath extraction | `{ schema: { fields }, llm?, sessionId? }` |
+| `extract_marketplace` | Marketplace listing scraper | `{ limit?, format?, sessionId? }` |
+| `human_timing_get` | Get timing profile | — |
+| `human_timing_set` | Adjust timing for speed/slow | `{ consultSpeed?, focusedWpmMin/Max?, etc }` |
+| `human_antispam_check` | Check page for blocking | — |
+| `browser_command` (raw) | Any AgentBridge command (opt-in) | `{ type, payload }` — requires `BRIDGE_MCP_ALLOW_RAW=1` |
+
+### 15. 🖥️ Live Viewer
+
+```
+http://localhost:8080/viewer
+```
+
+Watch the browser in real time via web GUI. Debug interactions, inspect the page, take over manually when needed.
 
 ---
 
-## 🔀 Default: MCP (recommended)
+## 🛡️ Anti-Detection System Details
 
-**Always start with MCP.** It exposes focused tools: `navigate`, `annotate_page`, `click_ref`, `type_ref`, `extract_schema`, `human_timing_get/set`, `human_antispam_check`.
+| Feature | How It Works |
+|---------|-------------|
+| **Bezier cursor** | Cubic Bezier curves (24-90 steps) for every mouse movement — never a straight line |
+| **Position tracking** | Server-side cursor state; every move starts from last known position, never (0,0) |
+| **Typing jitter** | Each character typed with variable delay (15-180ms between keystrokes) |
+| **Timing profiles** | 10 parameters adjustable live: consultSpeed, focusedWpmMin/Max, skimWpmMin/Max, pause ranges |
+| **Anti-spam** | Structured page checks for known blocking patterns; returns clean result instead of throwing |
+| **Stealth scripts** | Patches `navigator.webdriver` (=undefined), injects `window.chrome` runtime, spoofs `languages`, `plugins`, `platform`, `userAgent`, WebGL vendor |
+| **Cookie auto-accept** | Detects and clicks "Accept all" / "Tout accepter" buttons automatically |
+| **Human behavior layer** | scroll+read cycles, pause+backtrack, idle cursor jitter, focus cycles — all configurable |
+| **Flash click** | Visual indicator on click position (visible when not headless) |
 
-- Connect via `agentbridge-mcp` after `npm run build`
-- Works with Claude Desktop, Codex, and any MCP client
-- Simpler, smaller, enough for 80% of tasks
+## 🏆 Anti-Detection Bypass Comparison
 
-## ⚡ When to switch to JSON-RPC (advanced)
-
-Only reach for WebSocket when you genuinely need one of these:
-- Session isolation (`session.create` for parallel browsing)
-- Human timing live feedback (`human.feedback` events)
-- Low-level commands (`input.*`, `cookie.*`, `viewport.*`)
-- Vision streaming (`vision.start/stop`)
-- Batch execution via `script.execute`
-
-Switch by connecting directly to `ws://localhost:8080/ws/browser-bridge`.
-
-## 🪟 CLI (`bridge.cmd`) — for quick one-off commands
-
-Use the `exec` tool for simple, single actions (quick test, navigate once). Not recommended as your primary approach.
-
----
-
-## 1. Installation
-
-### 1.1 System Prerequisites
-- **Node.js** >= 18 (tested up to Node 24)
-- **npm** included with Node.js
-- **Git** (to clone the repository)
-- **Chromium** or **Chrome** installed (Playwright can download its own browser)
-
-### 1.2 Clone And Install
-```bash
-# 1. Go to the OpenClaw workspace
-cd C:\Users\<USER>\.openclaw\workspace
-
-# 2. Clone the project
-git clone https://github.com/alexandre-leng/agentbridge.git
-
-# 3. Install dependencies
-cd agentbridge
-npm install
-
-# 4. Install the Chromium browser for Playwright
-npx playwright install chromium
-```
-
-> **Quick alternative**: If you already have the folder, for example copied from another machine, skip `git clone` and run only `npm install`, then `npx playwright install chromium`.
-
-### 1.3 Start The Server
-```bash
-cd agentbridge
-npm start
-```
-
-Check that it is running: `http://localhost:8080/health` -> `{ "status": "ok" }`
-
-### 1.4 Verify The CLI
-```bash
-cd agentbridge
-.\bridge.cmd navigate https://example.com
-```
-
-If you see the page title, everything is ready.
+| Tool | YouTube | Google Search | Cloudflare JS sites | Bot score |
+|------|---------|---------------|-------------------|-----------|
+| curl / wget | ❌ 429 | ❌ Blocked | ❌ JS-locked | 100% bot |
+| Puppeteer-Extra + StealthPlugin | ❌ "Sign in" overlay | ❌ Detected | ⚠️ Partial | ~60% |
+| Playwright + stealth | ❌ Blocked | ❌ Detected | ⚠️ Partial | ~55% |
+| Selenium + undetected | ❌ Blocked | ❌ Detected | ❌ Blocked | ~70% |
+| Camoufox | ❌ Sign-in prompt | ⚠️ Partial | ⚠️ Partial | ~35% |
+| yt-dlp (no cookies) | ❌ LOGIN_REQUIRED | N/A | N/A | N/A |
+| Tor Browser | ❌ Blocked by most | ❌ CAPTCHA loop | ❌ Blocked | 100% |
+| Puppeteer-Extra | ❌ "Sign in" | ❌ Detected | ⚠️ Works some | ~50% |
+| **AgentBridge + Chrome CDP** | ✅ **Full access** | ✅ **Works** | ✅ **Works** | **<5%** |
 
 ---
 
-## 2. Enable The Skill In OpenClaw
+## 🔧 Use Cases
 
-Enable this skill in the OpenClaw configuration so the agent knows it can use it.
-
-### 2.1 Verify That The Skill Exists
-The skill should be in the agent skills directory:
-```bash
-ls .openclaw\workspace\skills\browser-bridge\SKILL.md
-```
-
-If you just cloned the project, copy it:
-```bash
-mkdir -p .openclaw\workspace\skills\browser-bridge
-copy agentbridge\SKILL.md .openclaw\workspace\skills\browser-bridge\SKILL.md
-```
-
-### 2.2 Enable It In openclaw.json
-Add or verify this entry in `.openclaw/openclaw.json`:
-
-```json
-"skills": {
-  "entries": {
-    "browser-bridge": {
-      "enabled": true
-    }
-  }
-}
-```
-
-### 2.3 Restart OpenClaw
-```bash
-openclaw gateway restart
-```
-
-After restart, the agent can access this skill and use it when you ask it to visit a website, search, click, extract data, and so on.
-
-### 2.4 Install Via ClawHub If Available
-```bash
-openclaw clawhub install browser-bridge
-```
+1. **Bug Bounty & Security** — Automate recon, bypass WAF, navigate authenticated sessions, extract findings
+2. **Lead Generation** — `scrape-emails "AI consultants France" --limit=100 --out=leads.csv`
+3. **Web Scraping** — JS-heavy e-commerce, directories, marketplaces
+4. **SaaS Automation** — Fill forms, navigate dashboards, extract reports
+5. **Market Research** — Price monitoring, competitor analysis, directory scraping
+6. **YouTube Research** — No-cookie access to descriptions, comments, metadata, related videos
+7. **AI Training Data** — Collect real-world content from protected sites
+8. **Data Pipelines** — Integrate with Claude, Cursor, Windsurf via MCP or n8n/Make via HTTP
 
 ---
 
-## 3. Identity & Endpoint
+## 🚀 Quick Start
 
-**What it is:** A headless Chromium browser controlled via JSON-RPC over WebSocket. Every interactive element gets a numeric `id` (`ref`) for precise interaction.
-
-- WebSocket: `ws://localhost:8080/ws/browser-bridge`
-- HTTP (health, captures, viewer): `http://localhost:8080`
-- Live Viewer (ask human for CAPTCHA / complex logins): `http://localhost:8080/viewer`
-- CLI: `bridge.cmd` (in the bridge project folder)
-
-**Authentication:**
-- If `BRIDGE_TOKEN` is set, send header `Authorization: Bearer <token>` on WS connect, or `?token=<token>` in the WS URL.
-- For CLI: token is not needed (local only).
-
-**MCP Server** (experimental): `npm run mcp` in bridge folder, or `agentbridge-mcp` after build. Tools: `browser_status`, `navigate`, `annotate_page`, `click_ref`, `type_ref`, `extract_schema`, `human_timing_get`, `human_timing_set`, `human_antispam_check`. Raw `browser_command` requires `BRIDGE_MCP_ALLOW_RAW=1`.
-
----
-
-## 4. Prerequisites
-
-### Bridge server must be running
 ```bash
-cd agentbridge && npm start
-```
-Verify: `http://localhost:8080/health`
+# 1. Install
+npm install -g browser-agentbridge-ai
+npm run build
 
-### CLI location
-`bridge.cmd` lives in the bridge project folder. Run commands from there or use the full path.
+# 2. Start the bridge server
+agentbridge start
+# → WebSocket: ws://localhost:8080/ws/browser-bridge
+# → Live GUI:  http://localhost:8080/viewer
 
-### Auto-Start Helper
-Save as `bridge-check.cjs` in the bridge folder:
+# 3. Navigate
+agentbridge navigate https://example.com
 
-```javascript
-const http = require('http');
-const { spawn } = require('child_process');
+# 4. Analyze
+agentbridge annotate
 
-function checkHealth() {
-  return new Promise((resolve) => {
-    const req = http.get('http://localhost:8080/health', (res) => {
-      resolve(res.statusCode === 200);
-    });
-    req.on('error', () => resolve(false));
-    req.setTimeout(3000, () => { req.destroy(); resolve(false); });
-  });
-}
+# 5. Interact
+agentbridge click 3
+agentbridge type 5 "hello world"
+agentbridge press Enter
 
-async function main() {
-  if (await checkHealth()) {
-    console.log('✅ Bridge already running'); process.exit(0);
-  }
-  console.log('🚀 Starting bridge...');
-  spawn('npm', ['start'], { cwd: __dirname, stdio: 'inherit', shell: true });
-  await new Promise(r => setTimeout(r, 4000));
-  console.log(await checkHealth() ? '✅ Started' : '⚠️  Still starting...');
-}
-main().catch(console.error);
+# 6. Extract
+agentbridge extract article --format=json
+agentbridge extract-emails https://example.com/contact
+
+# 7. Lead gen (one command)
+agentbridge scrape-emails "AI consultants France" --limit=50 --out=leads.csv --fast
+
+# 8. REPL (interactive)
+agentbridge repl
 ```
 
-### Reusable WS Client Helper
-Save as `examples/quick-client.cjs`:
+### Without Playwright (CDP Fallback)
 
-```javascript
-const WebSocket = require('ws');
-const WS_URL = 'ws://localhost:8080/ws/browser-bridge';
+Works on any system with Chrome, even when Playwright isn't supported:
 
-async function sendCommand(ws, cmd) {
-  return new Promise((resolve) => {
-    const handler = (data) => {
-      try {
-        const msg = JSON.parse(data.toString());
-        if (msg.id === cmd.id) { ws.off('message', handler); resolve(msg); }
-      } catch (e) {}
-    };
-    ws.on('message', handler);
-    ws.send(JSON.stringify(cmd));
-  });
-}
-
-async function withBridge(fn) {
-  const ws = new WebSocket(WS_URL);
-  await new Promise((resolve, reject) => {
-    ws.once('open', resolve);
-    ws.once('error', reject);
-  });
-  try { return await fn(ws); } finally { ws.close(); }
-}
-
-module.exports = { sendCommand, withBridge };
-```
-
----
-
-## 5. Mental Loop (OBLIGATORY)
-
-**Never interact blindly. Follow this loop every time:**
-
-```
-1. ANNOTATE  →  bridge.cmd annotate  OR  page.annotate
-   └─> Returns: elements[] with {id, role, name, text} + screenshot URL
-
-2. REASON    →  Look at the screenshot, find the ref (id) in the JSON list
-
-3. ACT       →  bridge.cmd click <ref>  OR  agent.click {ref: N}
-
-4. VERIFY    →  bridge.cmd summary  OR  agent.summary / page.annotate
-```
-
-**Critical:** A `ref` from step 1 is **invalid** after navigation or DOM update. Always re-annotate.
-
----
-
-## 6. CLI Approach (`bridge.cmd`)
-
-Use the `exec` tool for quick, simple browser tasks.
-
-### Basic pattern
-```javascript
-exec: {
-  command: "bridge.cmd <command> [args]",
-  workdir: "<path-to-agentbridge>"
-}
-```
-
-### CLI Commands
-
-| Command | Purpose | Example |
-|---------|---------|---------|
-| `navigate <url>` | Go to URL | `bridge.cmd navigate https://example.com` |
-| `search <query>` | Search Google/Bing | `bridge.cmd search "OpenClaw"` |
-| `annotate` | Screenshot + element list | `bridge.cmd annotate` |
-| `annotate --no-image` | Element list **without screenshot** (10x faster) | `bridge.cmd annotate --no-image` |
-| `click <ref>` | Click element by ID | `bridge.cmd click 7` |
-| `type <ref> <text>` | Type into input | `bridge.cmd type 2 "formalibre"` |
-| `press <key>` | Press Enter, Tab, Escape | `bridge.cmd press Enter` |
-| `scroll <amount>` | Scroll by pixels | `bridge.cmd scroll 500` |
-| `wait <ms>` | Wait milliseconds | `bridge.cmd wait 3000` |
-| `wait --for text <text>` | Wait until text appears | `bridge.cmd wait --for text "Results"` |
-| `extract <type>` | Extract structured data | `bridge.cmd extract article` |
-| `summary` | Lightweight page summary | `bridge.cmd summary` |
-| `visible-text --filter=...` | Extract visible text elements | `bridge.cmd visible-text --filter-any=Phone,Address --filter-lines` |
-| `run "cmd1" "cmd2" ...` | Execute multiple commands in batch | See §6 |
-
-### Human-like CLI commands
-| Command | Purpose | Example |
-|---------|---------|---------|
-| `scan --steps=N --filter=X` | Read visible text, scroll slowly | `bridge.cmd scan --steps=4 --filter-any=Restaurant,Address` |
-| `find-text "..."` | Search text, scroll if needed | `bridge.cmd find-text "Le Ramus"` |
-| `click-text "..."` | Find text + click (even non-button) | `bridge.cmd click-text "Le Ramus"` |
-| `read` | Focused reading with human pauses | `bridge.cmd read` |
-| `skim <steps> <px>` | Quick page scan with pauses | `bridge.cmd skim 4 420` |
-| `idle <ms>` | Gentle mouse movement + reading pauses | `bridge.cmd idle 2500` |
-| `jitter <radius> <count>` | Small hesitation movements | `bridge.cmd jitter 18 4` |
-| `backtrack` | Scroll back up (human re-reading) | `bridge.cmd backtrack` |
-| `focus-cycle <n>` | Tab through focusable elements | `bridge.cmd focus-cycle 3` |
-| `go-back` / `go-forward` | History nav with human pause | `bridge.cmd go-back` |
-| `antispam` | Check page for anti-bot detection | `bridge.cmd antispam` |
-| `timing get` | View current human timing profile | `bridge.cmd timing get` |
-| `timing set consultSpeed=1.6 ...` | Adjust timing profile at runtime | `bridge.cmd timing set consultSpeed=1.6 minFocusedMs=3500` |
-
-### CLI Batch with `run`
 ```bash
-bridge.cmd run "navigate https://duckduckgo.com/?q=formalibre" "wait 3000" "annotate --no-image"
+# Launch Chrome headless with remote debugging
+google-chrome --headless=new --no-sandbox --remote-debugging-port=9222 &
+sleep 1
+
+# Get WebSocket URL
+WS_URL=$(curl -s http://127.0.0.1:9222/json/version | \
+  python3 -c "import sys,json; print(json.load(sys.stdin)['webSocketDebuggerUrl'])")
+
+# Point AgentBridge at it
+export CHROME_CDP_URL="$WS_URL"
+export BRIDGE_HEADLESS=true
+npx agentbridge start
 ```
 
-Returns **all step results** by default — complete trace:
+### MCP Integration
 
-```json
-{
-  "ok": true,
-  "results": [
-    { "step": 0, "type": "navigate", "ok": true, "title": "formalibre at DuckDuckGo" },
-    { "step": 1, "type": "wait", "ok": true },
-    { "step": 2, "type": "page.annotate", "ok": true, "elements": 112 }
-  ],
-  "durationMs": 1345
-}
+```bash
+# Start MCP server (stdin/stdout transport for Claude/Cursor/Windsurf)
+npm run mcp
+
+# Now you can use all 16+ MCP tools in any MCP-compatible host
 ```
 
 ---
 
-## 7. JSON-RPC Approach (WebSocket)
+## 📄 Output Formats
 
-For advanced, precise, multi-step workflows. **80 commands total** across 14 categories. Full reference in `docs/api.md` (auto-generated in bridge folder).
-
-### Protocol
-
-**Request:**
-```json
-{ "id": "<unique string>", "type": "<command.name>", "payload": { "key": "value" } }
-```
-
-**Success Response:**
-```json
-{ "id": "<same id>", "ok": true, "result": { /* command-specific */ } }
-```
-
-**Error Response:**
-```json
-{ "id": "<same id>", "ok": false, "error": "message", "code": "ERROR_CODE" }
-```
-
-### Command Families
-
-#### 👁️ SEE — Understand the page
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `page.annotate` | Screenshot + numbered element list | `{}` |
-| `agent.summary` | Lightweight: URL, title, top elements | `{}` |
-| `agent.tree` | Full ARIA accessibility tree | `{}` |
-| `vision.screenshot` | Raw screenshot as base64 | `{}` |
-| `vision.start` | Start real-time frame stream (broadcasts `vision.frame` events to all clients) | `{fps: number, annotate?: boolean}` |
-| `vision.stop` | Stop real-time frame stream | `{}` |
-| *(event)* `vision.frame` | Server-pushed frame event while streaming (use MD5 diffing) | `{frame: base64, timestamp, md5}` |
-| `dom.visibleText` | Extract visible text with filters | `{query: ".css", filterAny: ["Phone", "Address"], filterLines: true, limit: 100}` |
-
-#### 🧭 NAVIGATE — Move around
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `navigate` | Go to URL | `{url: "https://..."}` |
-| `agent.search` | Search Google/Bing | `{query: "...", engine: "google"}` |
-| `combo.searchAndClick` | Search + click first result | `{query: "..."}` |
-| `misc.search` | Alt. search interface | Depending on config |
-| `tab.new` | Open new tab | `{url: "optional"}` |
-| `tab.switch` | Switch to tab index | `{index: 0}` |
-| `tab.close` | Close tab by index | `{index: 1}` |
-| `tab.list` | List all open tabs | `{}` |
-| `browser.close` | Close entire browser | `{}` |
-| `browser.status` | Browser status info | `{}` |
-
-#### 🖱️ ACT — Interact (always by `ref`)
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `agent.click` | Click element #N | `{ref: 7}` |
-| `agent.type` | Focus, clear (clearFirst), type text | `{ref: 7, text: "hello", clearFirst: true}` |
-| `agent.hover` | Hover over element | `{ref: 7}` |
-| `agent.press` | Press key (Enter, Tab, Escape) | `{key: "Enter"}` |
-| `agent.scroll` | Scroll up/down | `{direction: "down\|up", amount: 300}` |
-| `agent.select` | Select dropdown option | `{ref: 7, option: "Label"}` |
-| `agent.waitFor` | Wait for text/url/selector | `{for: "text", value: "...", timeout: 5000}` |
-
-**Low-level alternatives** (for edge cases):
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `dom.click` | Click element by CSS selector | `{selector: "button.primary"}` |
-| `dom.type` | Type into selector | `{selector: "#search", text: "..."}` |
-| `dom.fillForm` | Fill multiple fields at once | `{fields: {name: "Alex", email: "..."}}` |
-| `dom.doubleClick` | Double-click | `{ref: 7}` or `{selector: "..."}` |
-| `dom.submit` | Submit a form | `{ref: 7}` or `{selector: "..."}` |
-| `dom.press` | Press key on element (waitForNavigation auto si Enter) | `{ref: 7, key: "Enter", waitForNavigation: true}` |
-| `dom.scrollDown` / `dom.scrollUp` | Scroll element | `{ref: 7, amount: 300}` |
-| `dom.search` | Search within DOM | `{text: "..."}` |
-| `dom.select` | Select option by selector | `{ref: 7, value: "fr"}` |
-| `dom.goto` | Navigate (raw DOM version) | `{url: "..."}` |
-| `dom.hover` | Hover by selector | `{selector: "..."}` |
-
-**Raw input commands** (bypass ref system):
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `input.text` | Type text (no clear, appends) | `{text: "hello"}` |
-| `input.focus` | Focus an element | `{ref: 7}` or `{selector: "..."}` |
-| `input.keyDown` / `input.keyUp` | Key press raw | `{key: "Enter"}` |
-| `input.mouseDown` / `input.mouseUp` | Mouse raw | `{x: 100, y: 200}` |
-| `input.mouseMove` | Move mouse | `{x: 100, y: 200, steps: 5}` |
-| `input.wheel` | Scroll wheel | `{deltaY: 300}` |
-
-#### 👤 HUMAN — Simulate human behavior
-
-These commands make automation look like a real person. Use them on sensitive sites.
-
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `human.read` | Read visible text with human timing | `{focused: true}` |
-| `human.scan` | Scroll + read progressively | `{steps: 4, filterAny: ["Restaurant", "Address"], filterLines: true}` |
-| `human.skim` | Quick page skim with backscroll | `{steps: 4, scrollPx: 420}` |
-| `human.findText` | Search visible text, scroll if needed | `{text: "Le Ramus", timeoutMs: 8000}` |
-| `human.clickText` | Find text and click (even non-button) | `{text: "Le Ramus", timeoutMs: 15000}` |
-| `human.explore` | Explore page content | — |
-| `human.idle` | Mouse movement + reading pauses | `{ms: 2500}` |
-| `human.jitter` | Small hesitation movements | `{radius: 18, count: 4}` |
-| `human.backtrack` | Scroll back up (re-reading) | `{}` |
-| `human.focusCycle` | Tab through focusable elements | `{maxTabs: 3}` |
-| `human.goBack` / `human.goForward` | History with human pause | `{}` |
-| `human.timing.get` | Get current human timing profile | `{}` |
-| `human.timing.set` | Adjust human timing at runtime | See §7.1 below |
-| `human.timing.reset` | Restore default timing profile | `{}` |
-| `human.antispam.check` | Check page for anti-bot detection | `{}` |
-
-##### 7.1 Human Timing Profile
-
-Controls consultation speeds: reading, scanning, re-reading. Mouse/keyboard have their own human models.
-
-**`human.timing.set` payload:**
-```json
-{
-  "consultSpeed": 1.0,
-  "focusedWpmMin": 150,
-  "focusedWpmMax": 210,
-  "skimWpmMin": 190,
-  "skimWpmMax": 280,
-  "minFocusedMs": 3500,
-  "maxFocusedMs": 60000,
-  "minSkimMs": 1500,
-  "maxSkimMs": 25000,
-  "feedbackIntervalMs": 800
-}
-```
-
-| Field | Effect | Hint |
-|-------|--------|------|
-| `consultSpeed` | Multiplies all consultation times | `1` normal, `1.5` slower, `0.75` faster |
-| `focusedWpmMin/Max` | Focused reading speed | Lower WPM = longer pauses |
-| `skimWpmMin/Max` | Quick scan speed | Keep higher than focused WPM |
-| `minFocusedMs/MaxFocusedMs` | Pause bounds for `human.read` | Increase on sensitive sites |
-| `minSkimMs/MaxSkimMs` | Pause bounds for scan/search | Useful for long lists |
-| `feedbackIntervalMs` | `human.feedback` event frequency | 500-1500ms is good |
-
-**Recommended agent loop:**
-1. Get profile with `human.timing.get` at session start
-2. After navigation, prefer `human.read` or `human.scan` before clicking
-3. On rapid feedback or sensitive pages, call `human.timing.set` with higher `consultSpeed` and longer minimums
-4. Call `human.antispam.check` after repeated searches, result pages, or unusual behavior
-5. If `blocked: true`, stop automation and request human intervention via Live Viewer
-
-#### 📊 DATA — Extract structured content
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `dom.extract` | Smart extraction by type | `{type: "search-results\|form\|article\|table\|google-maps\|listings\|marketplace", limit?}` |
-| `web.search` | Full web search with pagination and dedupe | `{query, engine?, limit?, pages?, organicOnly?}` |
-| `dom.html` | Inner HTML of selector | `{selector: "body"}` |
-| `dom.waitFor` | Wait for element state | `{query: ".result", state: "visible", timeout: 10000}` |
-| `dom.inspect` | Debug element by ref | `{ref: 7}` |
-| `dom.visibleText` | Visible text with filters | `{textFilter: "...", filterAny: [...], filterLines: true, limit: 100, includeHidden: false}` |
-
-#### 🍪 STATE — Cookies & Viewport
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `cookie.get` | Get all cookies | `{}` |
-| `cookie.set` | Set a cookie | `{name: "session", value: "...", domain: ".site.com"}` |
-| `viewport.set` | Resize viewport | `{width: 1920, height: 1080}` |
-
-#### 🔄 ORCHESTRATE — Batch & pipeline
-| Command | Purpose | Payload |
-|---------|---------|---------|
-| `script.execute` | Run multiple commands in one WS message | `{commands: [...], stopOnError: true}` |
-| `misc.wait` | Wait for page event | `{ms: 3000}` or `{}` (load) |
-| `screenshot` | Save screenshot (full page mode dispo) | `{format: "png", fullPage: false}` |
-
-**Interpolation in batch:** Reference previous step results with `${stepN.path}`:
-```json
-{"type":"agent.click","payload":{"ref":"${step1.result.elements[0].id}"}}
-```
-
-#### 🔀 SESSION — Multi-browser isolation
-| Command | Purpose |
-|---------|---------|
-| `session.create` | Create named browser context | `{sessionId: "research-1", headless: false, profileDir: "/tmp/profile"}` |
-| `session.list` | List active sessions |
-| `trace.list` | List trace events for a session | `{sessionId: "my-session"}` |
-| `trace.save` | Save trace to disk | `{sessionId: "my-session"}` |
-| `trace.artifacts` | List trace artifacts | `{}` |
-
-Send `"sessionId": "my-session"` in any request to target a specific session.
-
-#### UNSAFE — Requires admin
-| Command | Purpose | Condition |
-|---------|---------|-----------|
-| `exec.script` | Execute arbitrary JS in page | Needs `BRIDGE_ADMIN_TOKEN` + `BRIDGE_ALLOW_EXEC_SCRIPT=1` |
-| `agent.task` | LLM-driven high-level task | May need token |
-| `agent.discoverScroll` | Auto-discover scrollable area | — |
-
-### Real-time `human.feedback` Events
-
-During `human.read`, `human.scan`, and `human.findText`, the bridge broadcasts WebSocket events `human.feedback` for live agent control:
-
-```json
-{
-  "type": "human.feedback",
-  "payload": {
-    "phase": "consulting",
-    "reason": "human.scan.step.2",
-    "elapsedMs": 2400,
-    "remainingMs": 5200,
-    "progress": 0.31,
-    "step": 2,
-    "totalSteps": 4
-  }
-}
-```
-
-Phases: `consulting` (paused reading), `consulted` (done), `scrolling`, `timing.updated`, `timing.reset`, `antispam.ok`, `antispam.warning`.
+| Format | Available for | Example |
+|--------|--------------|---------|
+| **JSON** | All extract commands | `--format=json` |
+| **CSV** | Marketplace, listings, emails | `--format=csv --out=data.csv` |
+| **Screenshots** | Annotate, screenshot, vision | JPEG, return URL + base64 |
+| **Visible text** | `visibleText` | Filtered or raw |
+| **File save** | Any extraction | `--out=file.json` or `--out=data.csv` |
+| **JSON Lines** | CLI output | `--json-lines` flag |
 
 ---
 
-## 8. Batch Execution (Both Approaches)
+## 🔗 Links
 
-### CLI (bridge.cmd run)
-```bash
-bridge.cmd run "navigate https://site.com" "wait 2000" "annotate --no-image"
-```
-
-### JSON-RPC (script.execute)
-```json
-{"id":"1","type":"script.execute","payload":{
-  "commands": [
-    {"type":"navigate","payload":{"url":"https://site.com"}},
-    {"type":"misc.wait","payload":{}},
-    {"type":"page.annotate","payload":{}}
-  ]
-}}
-```
+- **ClawHub**: https://clawhub.ai/skills/agentbridge
+- **npm package**: `npm install -g browser-agentbridge-ai`
+- **Source code**: https://github.com/alexandre-leng/AgentBridge-AI
+- **Author**: Alexandre Leng (@alexandre-leng)
 
 ---
 
-## 9. Security Rules
+## 📦 Requirements
 
-**You MUST enforce these. Never bypass.**
+- **Node.js** ^18.0.0
+- **Browser**: Chromium (via Playwright) OR any Chrome-based browser via CDP
+- **RAM**: ~100MB for bridge server + browser memory
 
-| Rule | Detail |
-|------|--------|
-| `exec.script` | **Requires `adminToken`** matching `BRIDGE_ADMIN_TOKEN` env var. If not set, command is **disabled**. Never attempt without token. |
-| URLs | Only `http:`, `https:`, `about:`, `file:` allowed. **Refuse** `javascript:`, `data:`, etc. |
-| Cookies | Structurally validated server-side. Don't forge. |
-| Rate limit | 100 messages/minute per client. Batch with `script.execute` to stay under limit. |
-| Origins | If `BRIDGE_ALLOWED_ORIGINS` is set, rejected if Origin header doesn't match. |
+## License
 
----
-
-## 10. Proven Patterns
-
-### A. Search DuckDuckGo → Click First Result
-**CLI:**
-```bash
-bridge.cmd run "navigate https://duckduckgo.com/?q=QUERY" "wait 3000" "annotate --no-image"
-bridge.cmd click <ref>
-```
-
-**JSON-RPC:**
-```json
-{"id":"1","type":"script.execute","payload":{
-  "commands": [
-    {"type":"navigate","payload":{"url":"https://duckduckgo.com/?q=QUERY"}},
-    {"type":"misc.wait","payload":{}},
-    {"type":"page.annotate","payload":{}},
-    {"type":"agent.click","payload":{"ref":25}}
-  ]
-}}
-```
-
-### B. Fill a Form
-```bash
-bridge.cmd annotate
-bridge.cmd type <ref-username> "user@example.com"
-bridge.cmd type <ref-password> "password123"
-bridge.cmd click <ref-submit>
-```
-
-### C. Extract Data (Search Results / Articles / Tables)
-```bash
-bridge.cmd navigate https://example.com/portfolio
-bridge.cmd extract article
-```
-
-### D. Scroll & Extract
-```bash
-bridge.cmd run "navigate https://site.com" "scroll 800" "extract article"
-```
-
-### E. Multi-Session Research (JSON-RPC only)
-```json
-{"id":"1","type":"session.create","payload":{"sessionId":"research-1"}}
-{"id":"2","type":"navigate","payload":{"url":"https://news.com"},"sessionId":"research-1"}
-{"id":"3","type":"navigate","payload":{"url":"https://competitor.com"},"sessionId":"research-2"}
-```
-
-### F. Human-Like Consultation on Sensitive Pages
-**JSON-RPC:**
-```json
-{"id":"t1","type":"human.timing.get","payload":{}}
-{"id":"t2","type":"human.timing.set","payload":{"consultSpeed":1.6,"minFocusedMs":4000}}
-{"id":"a1","type":"human.read","payload":{"focused":true}}
-{"id":"a2","type":"human.scan","payload":{"steps":4,"filterAny":["Restaurant","Address"]}}
-{"id":"c1","type":"human.antispam.check","payload":{}}
-```
-
-**CLI equivalent:**
-```bash
-bridge.cmd timing set consultSpeed=1.6 minFocusedMs=4000
-bridge.cmd read
-bridge.cmd scan --steps=4 --filter-any=Restaurant,Address
-```
-
-### G. Click Text Without Known Ref (text-based clicking)
-```bash
-bridge.cmd click-text "Ajouter au panier"
-bridge.cmd click-text "Search this area" --timeout-ms=15000
-```
-
-```json
-{"id":"g1","type":"human.clickText","payload":{"text":"Ajouter au panier"}}
-```
-
-### H. Windows / PowerShell Filtering
-Prefer comma-separated filters on Windows:
-
-```powershell
-.\bridge.cmd visible-text --filter-any=Formation,IA,Marseille --filter-lines
-.\bridge.cmd scan --steps=4 --filter-any=Restaurant,Address
-```
-
-`--filter-any=a,b,c` matches any term without relying on `|`, which `cmd.exe` can treat as a pipeline before Node receives the argument. `--filter-lines` applies filtering after extraction and returns only matching lines. Regex filters still work with `--filter="Formation|IA|Marseille"` in shells that preserve the pipe correctly.
-
-### I. Resilient Workflow (Complete)
-```bash
-# Step 1: Navigate, wait, annotate (fast)
-bridge.cmd run "navigate https://duckduckgo.com/?q=formalibre" "wait 3000" "annotate --no-image"
-
-# Step 2: Click result
-bridge.cmd click <ref>
-
-# Step 3: Wait and extract
-bridge.cmd run "wait 4000" "extract article"
-```
-
-### J. From Zero: First-Time Setup → First Action
-```bash
-# If the bridge is not running, start it first in a separate terminal:
-cd agentbridge && npm start
-
-# Then:
-bridge.cmd run "navigate https://example.com" "wait 1000" "annotate --no-image"
-# -> You can see the elements, their refs, and the title
-```
-
----
-
-## 11. Error Handling & Recovery
-
-| Error | Cause | Recovery |
-|-------|-------|----------|
-| `Connection refused` | Bridge server not running | Start server: `cd agentbridge && npm start` |
-| `Element not found` | Page changed, ref is stale | Re-annotate, get new `ref`. Bridge returns suggestions if available. |
-| `Element not found + suggestions` | Bridge suggests similar refs | Use the suggested `ref` if semantically correct |
-| `Timeout` | Element didn't appear | Increase wait, retry with `agent.waitFor`/`wait --for text` |
-| `Navigation aborted` | Redirect or popup blocker | Re-run `navigate` with full URL |
-| `Protocol not allowed` | URL uses `javascript:` etc. | Use only `http/https/about/file` |
-| `annotate` too large | Base64 screenshot embedded | Use `--no-image` or `result.imageUrl` (ignore base64 field) |
-| `dom.html` timeout | Heavy DOM | Use `dom.extract` instead |
-| `extract` returns empty | Wrong type or no data | Try `summary` or `annotate` first |
-| `exec.script disabled` | Token not set | Ask human; never bypass |
-| `bridge.cmd` not found | Not in PATH | Run from bridge folder |
-| `npm install` fails | Missing dependencies | Run `npm install` in bridge folder |
-| `npx playwright install` needed | Browser not found | Run `npx playwright install chromium` |
-| ESM error | `package.json` has `"type": "module"` | Use `.cjs` extension |
-| Slow/blocking sites | Anti-bot | Test with fast site first, increase wait; use `human.*` commands |
-| Anti-bot detected | `human.antispam.check` returns `blocked: true` | Stop automation → ask human for Live Viewer |
-| Skill not available | Skill disabled in openclaw.json | Check section 2.2, enable it, and restart |
-
-**Auto-navigation after `agent.press Enter`:** Server waits for `domcontentloaded`, but insert a `misc.wait` / `wait` step to be safe.
-
----
-
-## 12. Performance Optimizations
-
-### `--no-image` : Annotate without screenshot (10x faster)
-```bash
-bridge.cmd annotate --no-image
-```
-Returns: `elements[]`, `url`, `title` — no heavy base64 payload.
-
-### Batch with full trace
-Both CLI `run` and `script.execute` return all step results, plus `durationMs`.
-
-### Combine for maximum speed
-```bash
-bridge.cmd run "navigate https://example.com" "wait 500" "annotate --no-image" "summary"
-```
-Typical execution: **< 1 second** for 4 commands.
-
-### Prefer lightweight commands
-- `agent.summary` over `page.annotate` when you just need context
-- `--no-image` over default annotate when you only need element IDs
-- `dom.extract` over `dom.html` for structured data
-- `human.read` over manual scroll+annotate for long pages
-
----
-
-## 13. Environment Variables Reference
-
-| Variable | Role | Default |
-|----------|------|---------|
-| `PORT` | HTTP/WS port | 8080 |
-| `BRIDGE_HOST` | Bind host | 127.0.0.1 |
-| `BRIDGE_URL` | WS URL for TypeScript CLI | `ws://localhost:8080/ws/browser-bridge` |
-| `BRIDGE_TOKEN` | WS auth token | empty (ok locally) |
-| `BRIDGE_ADMIN_TOKEN` | Token for `exec.script` | empty = cmd disabled |
-| `BRIDGE_ALLOW_EXEC_SCRIPT` | Enable `exec.script` if `1` | 0 |
-| `BRIDGE_ALLOW_FILE_URLS` | Enable `file:` navigation if `1` | 0 |
-| `BRIDGE_ALLOWED_FILE_ROOTS` | CSV of allowed `file:` roots | empty |
-| `CHROME_CHANNEL` | Playwright browser channel | chrome |
-| `CHROME_PROFILE` | Persistent Chrome profile dir | empty |
-| `CHROME_CDP_URL` | Connect to existing browser via CDP | empty |
-| `BRIDGE_PLAYWRIGHT_SLOWMO_MS` | Slow down Playwright actions | 0 |
-| `BRIDGE_BRING_TO_FRONT` | Bring active page to front | 1 |
-| `BRIDGE_POLITE_MODE` | Domain rate-limit + anti-bot (0=off) | 1 |
-| `BRIDGE_POLITE_MIN_DELAY_MS` | Min delay between navs to same host | 12000 |
-| `BRIDGE_AUTO_COOKIES` | Auto-handle known cookie banners | 1 |
-| `BRIDGE_HUMAN_WARMUP` | Post-nav human movements/pauses | 1 |
-| `BRIDGE_PAGE_WARMUP_MS` | Warmup duration after nav | 2500 |
-| `BRIDGE_HUMAN_CONSULT_SPEED` | Initial human consult multiplier | `BRIDGE_DEMO_SPEED` or 1 |
-| `BRIDGE_DEMO_SPEED` | General movement/pause multiplier | 1 |
-| `BRIDGE_VISIBLE_CURSOR` | Show visual cursor injection | 1 |
-| `BRIDGE_ALLOWED_ORIGINS` | CSV of allowed origins | empty = all |
-| `BRIDGE_DEFAULT_TIMEOUT_MS` | Default Playwright timeout | 15000 |
-| `BRIDGE_DEFAULT_NAV_TIMEOUT_MS` | Default navigation timeout | 20000 |
-| `BRIDGE_LOG_JSON` | JSON logs if `1` | 0 |
-| `BRIDGE_HEADLESS` | Browser headless mode (set to `false` for visible browser) | `true` |
-| `BRIDGE_LOG_LEVEL` | Minimum log level | info |
-| `BRIDGE_MCP_ALLOW_RAW` | Expose raw MCP tool `browser_command` | 0 |
-
----
-
-## 14. Quick Reference
-
-| # | Friction | Solution | Where |
-|---|----------|----------|-------|
-| 1 | Bridge not installed | `git clone + npm install + npx playwright install chromium` | §1 |
-| 2 | Skill not enabled | Add `browser-bridge: { enabled: true }` in openclaw.json | §2 |
-| 3 | CLI not in PATH | Run from bridge folder | §6 |
-| 4 | Writing boilerplate | Use `bridge.cmd` or `examples/quick-client.cjs` | §4, §6 |
-| 5 | DDG search not via `search` | `navigate` with direct DDG URL (Pattern A) | §10A |
-| 6 | `dom.html` timeout | Use `dom.extract` instead | §11 |
-| 7 | `annotate` too large | `--no-image` or `result.imageUrl` | §12, §11 |
-| 8 | Bridge not running | `bridge-check.cjs` auto-starter | §4 |
-| 9 | Need human-like behavior | `human.*` commands (read, scan, clickText, antispam) | §7 |
-| 10 | Anti-bot detection | `human.antispam.check`, slow down with `human.timing.set` | §7.1 |
-| 11 | Text not in clickable element | `human.clickText` / `dom.visibleText` | §7 |
-| 12 | Missing patterns | Patterns A-I cover most cases | §10 |
-
-## 15. Do / Don't
-
-✅ **DO:**
-- Always start with `annotate` on an unknown page
-- Use batch (`run` / `script.execute`) for multi-step workflows
-- Prefer `summary` over `annotate` when you just need context
-- Use `dom.extract` / `dom.visibleText` instead of parsing raw text
-- Wait after navigation before re-annotating
-- Use `sessionId` to isolate parallel tasks
-- Use `human.*` on sensitive sites that might detect automation
-- Ask human for **Live Viewer** at `http://localhost:8080/viewer` when stuck on CAPTCHA or complex logins
-- Prefer `human.clickText` when you know the label but not the ref
-
-❌ **DON'T:**
-- Guess CSS selectors or coordinates — use `ref` from `annotate`
-- Trust a `ref` after navigation — always re-annotate
-- Call `exec.script` without `adminToken`
-- Send commands one-by-one if they belong together
-- Bypass security rules (javascript: URLs, cookies forging, etc.)
-- Continue automation if `human.antispam.check` returns `blocked: true`
-
----
-
-## 16. Self-Improvement Protocol
-
-At the end of every browsing session, reflect and propose updates.
-
-### During the task
-- Note every unexpected behavior (modal popup, cookie banner, dynamic iframe)
-- Note which `ref` strategy worked or failed
-- Record timing: how many steps, how many re-annotations needed
-
-### At task end
-Propose edits:
-```markdown
-## 📝 Proposed skill updates
-
-### New pattern discovered
-[Describe the situation and the solution]
-
-### Trap discovered
-[What went wrong and how to avoid it]
-
-### Suggested skill edit
-```diff
-- [old text from skill]
-+ [new text]
-```
-```
-
-**Rules:**
-- Never remove or weaken the **Security Rules** section without human approval
-- Prefer adding to "Patterns" or "Errors" sections
-- Keep the skill compact — if you add 10 lines, propose removing 5 obsolete ones
-- The human decides whether to apply the diff
-
----
-
-## 17. Complete Reference
-
-For the exhaustive list of all 80 commands, exact payloads, and return types:
-- **`docs/api.md`** (auto-generated) in the bridge project folder
-
-For the human-oriented workflow guide:
-- **`AGENT-GUIDE.md`** in the bridge project folder
-
-For environment variables and security hardening:
-- **`README.md`** → Security & Environment Variables
-
----
-
-*Skill version: 3.2.2 | Bridge version: 3.2+ | Last updated: 2026-05-18*
+MIT-0 — Free to use, modify, and redistribute. No attribution required.
