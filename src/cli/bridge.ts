@@ -87,10 +87,11 @@ export function mapCommand(type: string, pParts: string[]): any {
     case 'annotate': return { type: 'page.annotate', payload: { noImage: pParts.includes('--no-image') } };
     case 'extract': {
       const opts = optionParts(pParts);
+      const positional = opts.positional.filter((part, i) => part !== '--type' && !part.startsWith('--type=') && opts.positional[i - 1] !== '--type');
       return {
         type: 'dom.extract',
         payload: {
-          type: opts.positional[0]?.startsWith('--type') ? opts.positional[0].split('=')[1] : (opts.positional[0] || opts.positional[1]),
+          type: optValue(pParts, '--type') ?? positional[0],
           limit: opts.limit,
           format: opts.format,
         },
@@ -255,7 +256,8 @@ async function startRepl() {
 
   ws.on('message', (data) => {
     const msg = JSON.parse(data.toString());
-    if (msg.type === 'vision.frame' || msg.type === 'hello') return;
+    // Only command replies carry an id; skip broadcast events (frames, feedback, downloads…).
+    if (msg.id === undefined) return;
     if (msg.error) console.log('Error:', msg.error);
     else console.log(JSON.stringify(msg.result || msg, null, 2));
     rl.prompt();
@@ -325,6 +327,8 @@ async function main() {
       console.error(JSON.stringify(msg.payload, null, flags.quiet ? 0 : 2));
       return;
     }
+    // Other broadcast events (browser.download, vision.frame…) are not our reply.
+    if (msg.id !== 'cli') return;
     
     if (msg.ok) {
       const res = msg.result;

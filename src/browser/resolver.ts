@@ -26,11 +26,15 @@ export function resolve(page: Page, query: Query): Locator {
   if (typeof query !== 'string' || !query) {
     throw new Error('resolver: query is required (non-empty string)');
   }
-  const kind = detectKind(query);
-  if (kind === 'xpath') return page.locator(query.replace(/^xpath=/, ''));
-  if (kind === 'css') return page.locator(query.replace(/^css=/, ''));
+  const q = query.trim();
+  const kind = detectKind(q);
+  // Always pass an explicit engine prefix: Playwright only auto-detects XPath
+  // for selectors starting with `//` or `..`, so `(//a)[1]` or `/html/body`
+  // would otherwise be parsed as (invalid) CSS.
+  if (kind === 'xpath') return page.locator(`xpath=${q.replace(/^xpath=/, '')}`);
+  if (kind === 'css') return page.locator(`css=${q.replace(/^css=/, '')}`);
   
-  const txt = query.replace(/^text=/, '');
+  const txt = q.replace(/^text=/, '');
   return page
     .getByRole('button', { name: txt, exact: false })
     .or(page.getByRole('link', { name: txt, exact: false }))

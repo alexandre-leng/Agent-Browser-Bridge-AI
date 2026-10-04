@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { safeFilePart } from './security.js';
 
 export interface TraceEvent {
   id: number;
@@ -59,7 +60,7 @@ class TraceRecorder {
     const dir = traceDir();
     await mkdir(dir, { recursive: true });
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `trace-${ts}-session-${sessionId}.json`;
+    const filename = `trace-${ts}-session-${safeFilePart(sessionId)}.json`;
     const path = join(dir, filename);
     await writeFile(path, JSON.stringify({ sessionId, events: this.list(sessionId) }, null, 2), 'utf8');
     return { path, count: this.list(sessionId).length };

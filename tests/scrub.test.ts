@@ -30,4 +30,24 @@ describe('scrubPayload', () => {
     expect(scrubPayload('plain')).toBe('plain');
     expect(scrubPayload(42)).toBe(42);
   });
+
+  it('redacts typed values for every typing command, case-insensitive keys', () => {
+    expect((scrubPayload({ query: '#pwd', value: 'hunter2' }, 'dom.type') as any).value).toBe('[redacted]');
+    expect((scrubPayload({ text: 'hunter2' }, 'input.text') as any).text).toBe('[redacted]');
+    expect((scrubPayload({ values: { Password: 'x' } }, 'form.fill') as any).values).toBe('[redacted]');
+    const filled = scrubPayload({ fields: [{ query: '#pwd', value: 'hunter2' }] }, 'dom.fillForm') as any;
+    expect(filled.fields[0]).toEqual({ query: '#pwd', value: '[redacted]' });
+    expect((scrubPayload({ Authorization: 'Bearer x' }) as any).Authorization).toBe('[redacted]');
+  });
+
+  it('scrubs nested batch / script steps with their own command type', () => {
+    const out = scrubPayload({
+      commands: [
+        { type: 'agent.type', payload: { ref: 3, text: 'hunter2' } },
+        { type: 'agent.click', payload: { ref: 4, text: 'Sign in' } },
+      ],
+    }, 'batch') as any;
+    expect(out.commands[0].payload.text).toBe('[redacted]');
+    expect(out.commands[1].payload.text).toBe('Sign in');
+  });
 });

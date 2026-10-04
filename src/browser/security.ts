@@ -30,6 +30,45 @@ export function isLocalHost(host: string): boolean {
   return LOCAL_HOSTS.has(host);
 }
 
+function hostnameOf(hostHeader: string): string {
+  try {
+    return new URL(`http://${hostHeader}`).hostname.replace(/^\[|\]$/g, '');
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Decide whether a WebSocket upgrade may proceed based on its Origin/Host headers.
+ *
+ * - With `allowedOrigins` configured, only those origins (or non-browser clients
+ *   that send no Origin) are accepted.
+ * - Without it, browser clients must be same-origin (e.g. the bundled viewer);
+ *   otherwise any web page open in the user's browser could drive the bridge.
+ * - When bound to localhost, the Host header must also be local, which blocks
+ *   DNS-rebinding attacks that would otherwise look same-origin.
+ */
+export function isUpgradeAllowed(
+  origin: string | undefined,
+  hostHeader: string | undefined,
+  sec: Pick<RuntimeSecurity, 'allowedOrigins' | 'bindHost'>,
+): boolean {
+  if (isLocalHost(sec.bindHost) && hostHeader && !isLocalHost(hostnameOf(hostHeader))) return false;
+  if (!origin) return true;
+  if (sec.allowedOrigins.length > 0) return sec.allowedOrigins.includes(origin);
+  try {
+    return !!hostHeader && new URL(origin).host === hostHeader;
+  } catch {
+    return false;
+  }
+}
+
+/** Make an untrusted value (e.g. a sessionId) safe to embed in a file name. */
+export function safeFilePart(value: unknown, fallback = 'default'): string {
+  const cleaned = String(value ?? '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
+  return cleaned || fallback;
+}
+
 export function requireBridgeToken(sec = securityFromEnv()): string {
   if (!isLocalHost(sec.bindHost) && !sec.bridgeToken) {
     throw new Error('BRIDGE_TOKEN is required when BRIDGE_HOST is not localhost');

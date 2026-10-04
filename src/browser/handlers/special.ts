@@ -18,12 +18,13 @@ import {
   randInt,
   updateHumanTimingProfile,
 } from '../human.js';
-import { SEARCH_URLS } from './navigation.js';
+import { searchUrl } from './navigation.js';
 import { validate } from './validate.js';
 import { extractFrenchPhones } from './phone.js';
-import { assertExecAllowed } from '../security.js';
+import { assertExecAllowed, safeFilePart } from '../security.js';
 import { politeGoto, assertNoAntiBot } from '../polite.js';
 import { annotateInteractive, getAgentElements } from '../agent.js';
+import { sessionStore } from '../controller.js';
 
 const COOKIE_SELECTORS = [
   '#L2AGLb', // Google
@@ -72,17 +73,29 @@ export function specialHandlers(ctx: HandlerContext): Record<string, Handler> {
       let step = 0;
       const t0 = Date.now();
       
+      const lookup = (context: any[], stepIdx: string, path: string) => {
+        const res = context.find((r) => r.step === Number(stepIdx));
+        if (!res || !('result' in res)) return undefined;
+        let val = res.result;
+        for (const p of path.split(/[.\[\]]+/).filter(Boolean)) {
+          if (val === undefined || val === null) return undefined;
+          val = val[p];
+        }
+        return val;
+      };
       const resolveVars = (obj: any, context: any): any => {
         if (typeof obj === 'string') {
+          // A value that is exactly one placeholder keeps its original type
+          // (number, boolean, object…) instead of being stringified.
+          const whole = obj.match(/^\$\{step(\d+)\.([^}]+)\}$/);
+          if (whole) {
+            const val = lookup(context, whole[1], whole[2]);
+            return val === undefined ? obj : val;
+          }
           return obj.replace(/\$\{step(\d+)\.([^}]+)\}/g, (_, stepIdx, path) => {
-            const res = context[Number(stepIdx)];
-            if (!res) return _;
-            let val = res.result;
-            for (const p of path.split(/[.\[\]]+/).filter(Boolean)) {
-              if (val === undefined || val === null) break;
-              val = val[p];
-            }
-            return val ?? _;
+            const val = lookup(context, stepIdx, path);
+            if (val === undefined || val === null) return _;
+            return typeof val === 'object' ? JSON.stringify(val) : String(val);
           });
         }
         if (Array.isArray(obj)) return obj.map(v => resolveVars(v, context));
@@ -96,12 +109,13 @@ export function specialHandlers(ctx: HandlerContext): Record<string, Handler> {
 
       for (const cmd of commands) {
         try {
+          if (!cmd || typeof cmd.type !== 'string') throw new Error('missing or invalid `type`');
           const payload = resolveVars(cmd.payload ?? {}, allResults);
           finalResult = await ctx.dispatch(cmd.type, payload);
           allResults.push({ step, type: cmd.type, result: finalResult });
         } catch (err: any) {
-          if (stopOnError) throw new Error(`Script failed at step ${step} (${cmd.type}): ${err.message}`);
-          allResults.push({ step, type: cmd.type, error: err.message });
+          if (stopOnError) throw new Error(`Script failed at step ${step} (${cmd?.type}): ${err.message}`);
+          allResults.push({ step, type: cmd?.type, error: err.message });
         }
         step++;
       }
@@ -169,8 +183,9 @@ export function specialHandlers(ctx: HandlerContext): Record<string, Handler> {
 
     // --- Combos ---
     'combo.searchAndClick': async ({ query, engine = 'google' }) => {
+      const url = searchUrl(engine, query, 'combo.searchAndClick');
       const page = await ctx.p();
-      await politeGoto(page, SEARCH_URLS[engine](query), { waitUntil: 'domcontentloaded' });
+      await politeGoto(page, url, { waitUntil: 'domcontentloaded', allowDirectSearch: true });
       await humanPause(600, 1200);
       const firstResult = page.locator('a h3').first();
       await firstResult.waitFor({ state: 'visible', timeout: 8000 });
@@ -184,8 +199,9 @@ export function specialHandlers(ctx: HandlerContext): Record<string, Handler> {
     },
 
     'agent.search': async ({ query, engine = 'google' }: any) => {
+      const url = searchUrl(engine, query, 'agent.search');
       const page = await ctx.p();
-      await politeGoto(page, SEARCH_URLS[engine](query), { waitUntil: 'domcontentloaded' });
+      await politeGoto(page, url, { waitUntil: 'domcontentloaded', allowDirectSearch: true });
       await humanPause(1000, 2000);
       const results = await page.evaluate(() => {
         return Array.from(document.querySelectorAll('h3')).map(h => ({
@@ -198,10 +214,11 @@ export function specialHandlers(ctx: HandlerContext): Record<string, Handler> {
     },
 
     'agent.task': async ({ goal, engine = 'google' }: any) => {
+      const url = searchUrl(engine, goal, 'agent.task');
       const page = await ctx.p();
       
       // 1. Navigation
-      await politeGoto(page, SEARCH_URLS[engine](goal), { waitUntil: 'domcontentloaded' });
+      await politeGoto(page, url, { waitUntil: 'domcontentloaded', allowDirectSearch: true });
       await assertNoAntiBot(page);
       
       // 2. Auto-cookie
@@ -519,9 +536,10 @@ export function specialHandlers(ctx: HandlerContext): Record<string, Handler> {
         return { clicked: hit.text, x, y, url: page.url(), title: await page.title(), method: 'coordinates' };
       } catch (err: any) {
         humanFeedback(ctx, { phase: 'click-text.coordinate-failed', error: err?.message ?? String(err), elapsedMs: Date.now() - startedAt });
-        await annotateInteractive(page);
+        const sessionId = sessionStore.getStore();
+        await annotateInteractive(page, sessionId);
         const q = String(text).toLowerCase();
-        const ref = getAgentElements().find((el) => {
+        const ref = getAgentElements(sessionId).find((el) => {
           const hay = `${el.name} ${el.role}`.toLowerCase();
           return exact ? hay.trim() === q : hay.includes(q);
         });
@@ -552,7 +570,7 @@ export function specialHandlers(ctx: HandlerContext): Record<string, Handler> {
         const dir = join(process.cwd(), 'logs', 'screenshots');
         await mkdir(dir, { recursive: true });
         const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        const filename = `screenshot-${ts}.jpg`;
+        const filename = `screenshot-${ts}-session-${safeFilePart(sessionStore.getStore())}.jpg`;
         await writeFile(join(dir, filename), buf);
         const port = process.env.PORT ?? 8080;
         result.imageUrl = `http://localhost:${port}/captures/${filename}`;

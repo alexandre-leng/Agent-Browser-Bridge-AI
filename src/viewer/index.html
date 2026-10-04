@@ -45,7 +45,9 @@
   </div>
 </div>
 <script>
-const wsUrl = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/browser-bridge';
+const viewerToken = new URLSearchParams(location.search).get('token');
+const wsUrl = (location.protocol === 'https:' ? 'wss' : 'ws') + '://' + location.host + '/ws/browser-bridge'
+  + (viewerToken ? '?token=' + encodeURIComponent(viewerToken) : '');
 const ws = new WebSocket(wsUrl);
 const $frame = document.getElementById('frame');
 const $overlay = document.getElementById('overlay');

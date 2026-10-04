@@ -553,7 +553,7 @@ Full WebSocket example:
 | `BRIDGE_HUMAN_CONSULT_SPEED` | Initial human consultation multiplier | `BRIDGE_DEMO_SPEED` or 1 |
 | `BRIDGE_DEMO_SPEED` | General demonstration movement/pause multiplier | 1 |
 | `BRIDGE_VISIBLE_CURSOR` | Shows the injected visual cursor (`0` disables) | 1 |
-| `BRIDGE_ALLOWED_ORIGINS` | Comma-separated allowed origins | empty = all |
+| `BRIDGE_ALLOWED_ORIGINS` | Comma-separated allowed origins | empty = same-origin viewer and non-browser clients only |
 | `BRIDGE_DEFAULT_TIMEOUT_MS` | Default Playwright timeout | 15000 |
 | `BRIDGE_DEFAULT_NAV_TIMEOUT_MS` | Default navigation timeout | 20000 |
 | `BRIDGE_LOG_JSON` | JSON logs when `1` | 0 |

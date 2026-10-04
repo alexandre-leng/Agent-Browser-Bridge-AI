@@ -6,6 +6,7 @@ import { resolveVisible } from '../resolver.js';
 import { flashClick, humanMove, humanPreClick, humanType, humanScroll, humanPause, sleep, rand, randInt } from '../human.js';
 import { annotateInteractive, accessibilityTree, findByRef, findSimilar, getAgentElements, type AgentElement } from '../agent.js';
 import { assertNoAntiBot, assertUsefulPage } from '../polite.js';
+import { safeFilePart } from '../security.js';
 
 export function agentHandlers(ctx: HandlerContext): Record<string, Handler> {
   const getEl = async (ref: any, retry = true): Promise<AgentElement> => {
@@ -57,7 +58,7 @@ export function agentHandlers(ctx: HandlerContext): Record<string, Handler> {
           const dir = join(process.cwd(), 'logs', 'screenshots');
           await mkdir(dir, { recursive: true });
           const ts = new Date().toISOString().replace(/[:.]/g, '-');
-          const sid = sessionId ?? 'default';
+          const sid = safeFilePart(sessionId);
           const filename = `annotate-${ts}-session-${sid}.jpg`;
           const path = join(dir, filename);
           await writeFile(path, Buffer.from(imageB64, 'base64'));
@@ -209,8 +210,10 @@ export function agentHandlers(ctx: HandlerContext): Record<string, Handler> {
       const page = await ctx.p();
       const captures = [];
       const safeSteps = Math.max(1, Math.min(Number(steps) || 5, 20));
-      const delta = direction === 'up' ? -Math.abs(amount) : Math.abs(amount);
+      const delta = direction === 'up' ? -Math.abs(Number(amount) || 650) : Math.abs(Number(amount) || 650);
+      let stepsDone = 0;
       for (let i = 0; i < safeSteps; i++) {
+        stepsDone++;
         await humanScroll(page, delta);
         await sleep(rand(180, 420));
         await assertNoAntiBot(page);
@@ -230,7 +233,7 @@ export function agentHandlers(ctx: HandlerContext): Record<string, Handler> {
         }).catch(() => false);
         if (atEnd && direction === 'down') break;
       }
-      return { ok: true, steps: captures.length || safeSteps, captures };
+      return { ok: true, steps: stepsDone, captures };
     },
 
     'agent.waitFor': async ({ text, url, timeout = 12000 }: any) => {
@@ -263,15 +266,27 @@ export function agentHandlers(ctx: HandlerContext): Record<string, Handler> {
     'agent.select': async ({ ref, option, retry = true }: any) => {
       const page = await ctx.p();
       const el = await getEl(ref, retry);
+      // Locate the <select> under the annotated box rather than guessing from its name.
+      const marker = `ab-${Date.now()}-${randInt(0, 1e6)}`;
+      const marked = await page.evaluate(({ x, y, marker }) => {
+        const hit = document.elementFromPoint(x, y);
+        const select = hit instanceof HTMLSelectElement ? hit : hit?.closest('select');
+        if (!select) return false;
+        select.setAttribute('data-agentbridge-select', marker);
+        return true;
+      }, { x: el.box.x + el.box.w / 2, y: el.box.y + el.box.h / 2, marker }).catch(() => false);
       let loc;
-      if (el) {
-        loc = page.locator(`${el.tag}`, { hasText: el.name }).or(page.locator(`[aria-label="${el.name}"]`)).first();
+      if (marked) {
+        loc = page.locator(`[data-agentbridge-select="${marker}"]`);
+      } else if (el.name) {
+        loc = page.locator(el.tag, { hasText: el.name }).or(page.locator(`[aria-label=${JSON.stringify(el.name)}]`)).first();
       } else if (typeof ref === 'string') {
         loc = await resolveVisible(page, ref);
       } else {
         throw new Error(`agent.select: element not found — ref: ${ref}`);
       }
       const selected = await loc.selectOption(String(option));
+      if (marked) await loc.evaluate((node) => node.removeAttribute('data-agentbridge-select')).catch(() => {});
       return { selected };
     },
   };

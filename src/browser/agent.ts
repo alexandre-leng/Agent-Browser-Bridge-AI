@@ -37,9 +37,12 @@ function scoreMatch(el: AgentElement, query: string): number {
   const name = el.name.toLowerCase();
   const role = el.role.toLowerCase();
   
+  if (!q) return 0;
   if (name === q) return 100;
   if (name.includes(q)) return 80;
   if (role === q) return 60;
+  // Fuzzy matching against an empty name would match any short query.
+  if (!name) return 0;
   
   const dist = levenshtein(name, q);
   if (dist <= 3) return 70 - dist * 10;
@@ -51,6 +54,9 @@ export function findByRef(ref: string | number, sessionId: string = 'default'): 
   if (typeof ref === 'number') {
     return cache.find((e) => e.id === ref) ?? null;
   }
+  if (typeof ref !== 'string') return null;
+  // Refs coming from CLIs, JSON scripts or `${stepN...}` interpolation arrive as strings.
+  if (/^\s*\d+\s*$/.test(ref)) return cache.find((e) => e.id === Number(ref)) ?? null;
   const q = ref.toLowerCase().trim();
   
   let bestMatch: AgentElement | null = null;
@@ -225,10 +231,12 @@ async function collectElementsRecursive(frame: Frame, offset = { x: 0, y: 0 }, c
   for (const child of frame.childFrames()) {
     try {
       const handle = await child.frameElement();
+      // boundingBox() is already relative to the main frame viewport, even for
+      // nested iframes, so it must not be added to the parent offset.
       const box = await handle.boundingBox();
       if (box) {
         // Only recurse if the iframe itself is somewhat visible
-        const childElements = await collectElementsRecursive(child, { x: offset.x + box.x, y: offset.y + box.y }, context);
+        const childElements = await collectElementsRecursive(child, { x: box.x, y: box.y }, context);
         allElements = allElements.concat(childElements);
       }
     } catch {

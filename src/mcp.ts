@@ -5,10 +5,14 @@ import { z } from 'zod';
 import { buildHandlers } from './browser/handlers/index.js';
 import { controller, sessionStore } from './browser/controller.js';
 import { VERSION } from './version.js';
+import { setLogStream } from './logger.js';
+
+// stdout carries the MCP JSON-RPC stream; any log line there corrupts it.
+setLogStream('stderr');
 
 const handlers: Record<string, any> = {};
 const dispatch = async (type: string, payload: any = {}) => {
-  const handler = handlers[type];
+  const handler = Object.hasOwn(handlers, type) ? handlers[type] : undefined;
   if (!handler) throw new Error(`unknown command: ${type}`);
   const sessionId = payload?.sessionId;
   return sessionStore.run(sessionId, () => handler(payload));

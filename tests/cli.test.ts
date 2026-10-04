@@ -61,6 +61,11 @@ describe('mapCommand', () => {
     });
   });
 
+  it('maps extract --type option', () => {
+    expect(mapCommand('extract', ['--type', 'marketplace', '--limit=5']).payload).toMatchObject({ type: 'marketplace', limit: 5 });
+    expect(mapCommand('extract', ['--type=table']).payload).toMatchObject({ type: 'table' });
+  });
+
   it('maps scrape shorthand', () => {
     expect(mapCommand('scrape', ['--limit=10'])).toMatchObject({
       type: 'scrape.results',
@@ -108,6 +113,7 @@ describe('install adapters', () => {
   it('parses install targets and options', () => {
     expect(parseInstallArgs(['openclaw', '--global', '--force']).target).toBe('openclaw');
     expect(parseInstallArgs(['hermes', '--workspace', '/tmp/project']).options.workspace).toBe('/tmp/project');
+    expect(parseInstallArgs(['--workspace', '/tmp/project', 'openclaw']).target).toBe('openclaw');
   });
 
   it('plans openclaw and hermes skill files', () => {

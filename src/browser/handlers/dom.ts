@@ -162,7 +162,7 @@ export function domHandlers(ctx: HandlerContext): Record<string, Handler> {
         if (!q) throw new Error('dom.fillForm: each field requires `query`, `selector` or `text`');
         const loc = await resolveVisible(page, q);
         await loc.click();
-        await humanType(page, String(value));
+        await humanType(page, String(value ?? ''));
         await humanPause(60, 180);
       }
       return { filled: fields.length };

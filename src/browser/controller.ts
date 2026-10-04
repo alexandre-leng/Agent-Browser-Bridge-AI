@@ -4,6 +4,7 @@ import { readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import { STEALTH_SCRIPT } from './stealth.js';
 import { log } from '../logger.js';
+import { safeFilePart } from './security.js';
 
 export interface LaunchOpts {
   headless?: boolean;
@@ -24,6 +25,9 @@ export class BrowserController {
   private contexts = new Map<string, BrowserContext>();
   private pages = new Map<string, Page>();
   private eventListeners = new Set<(event: any) => void>();
+  // In-flight launches keyed by sessionId ('' = default) so concurrent callers
+  // share one context instead of each creating (and leaking) their own.
+  private launching = new Map<string, Promise<void>>();
 
   onEvent(cb: (event: any) => void) {
     this.eventListeners.add(cb);
@@ -38,6 +42,16 @@ export class BrowserController {
     const isDefault = !sessionId;
     if (isDefault && this.defaultContext) return;
     if (sessionId && this.contexts.has(sessionId)) return;
+    const key = sessionId ?? '';
+    const pending = this.launching.get(key);
+    if (pending) return pending;
+    const run = this.doLaunch(opts, sessionId).finally(() => this.launching.delete(key));
+    this.launching.set(key, run);
+    return run;
+  }
+
+  private async doLaunch(opts: LaunchOpts, sessionId?: string) {
+    const isDefault = !sessionId;
 
     const cdpUrl = opts.cdpUrl ?? process.env.CHROME_CDP_URL;
     const profileDir = opts.profileDir ?? process.env.CHROME_PROFILE;
@@ -207,7 +221,7 @@ export class BrowserController {
       const dir = join(process.cwd(), 'logs', 'screenshots');
       const files = await readdir(dir).catch(() => []);
       for (const file of files) {
-        if (!sessionId || file.includes(`-session-${sessionId}.`)) {
+        if (!sessionId || file.includes(`-session-${safeFilePart(sessionId)}.`)) {
           await unlink(join(dir, file)).catch(() => {});
         }
       }

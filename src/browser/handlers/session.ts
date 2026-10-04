@@ -5,6 +5,7 @@ import { controller, sessionStore } from '../controller.js';
 import { validateUrl } from './validate.js';
 import { traces } from '../traces.js';
 import { politeGoto } from '../polite.js';
+import { safeFilePart } from '../security.js';
 
 interface IncomingCookie {
   name: string;
@@ -79,7 +80,7 @@ export function sessionHandlers(ctx: HandlerContext): Record<string, Handler> {
       await mkdir(dir, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
       const sessionId = sessionStore.getStore() ?? 'default';
-      const filename = `shot-${ts}-session-${sessionId}.${ext}`;
+      const filename = `shot-${ts}-session-${safeFilePart(sessionId)}.${ext}`;
       const path = join(dir, filename);
       const buf = await page.screenshot({ path, type: ext === 'jpg' ? 'jpeg' : 'png', fullPage });
       const port = process.env.PORT ?? 8080;

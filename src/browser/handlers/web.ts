@@ -1,6 +1,6 @@
 import type { HandlerContext, Handler } from './types.js';
 import { SEARCH_URLS } from './navigation.js';
-import { assertNoAntiBot } from '../polite.js';
+import { assertNoAntiBot, politeGoto } from '../polite.js';
 
 const SEARCH_ENGINES = ['google', 'bing', 'duckduckgo'] as const;
 type SearchEngine = typeof SEARCH_ENGINES[number];
@@ -59,6 +59,8 @@ export function webHandlers(ctx: HandlerContext): Record<string, Handler> {
         warnings: [] as string[],
       };
 
+      // Result pages are search-engine URLs we build ourselves, so they bypass the
+      // polite "direct app search" guard (otherwise `useForm: false` always fails).
       for (let pageIndex = 0; pageIndex < maxPages && results.length < wanted; pageIndex++) {
         if (pageIndex === 0 && useForm) {
           await ctx.dispatch('navigate', { url: engine === 'google' ? 'https://www.google.com' : SEARCH_URLS[engine](query).split('?')[0] });
@@ -66,10 +68,10 @@ export function webHandlers(ctx: HandlerContext): Record<string, Handler> {
             await ctx.dispatch('form.search', { query, timeout });
           } catch (err: any) {
             report.warnings.push(`form search fallback: ${err?.message ?? String(err)}`);
-            await ctx.dispatch('navigate', { url: searchPageUrl(engine, query, pageIndex) });
+            await politeGoto(page, searchPageUrl(engine, query, pageIndex), { allowDirectSearch: true });
           }
         } else {
-          await ctx.dispatch('navigate', { url: searchPageUrl(engine, query, pageIndex) });
+          await politeGoto(page, searchPageUrl(engine, query, pageIndex), { allowDirectSearch: true });
         }
 
         await page.waitForLoadState('domcontentloaded', { timeout }).catch(() => {});

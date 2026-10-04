@@ -209,7 +209,7 @@ export function extractionHandlers(ctx: HandlerContext): Record<string, Handler>
             name: el.name || el.id,
             placeholder: el.placeholder,
             required: el.required,
-            label: document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim()
+            label: el.id ? document.querySelector(`label[for="${CSS.escape(el.id)}"]`)?.textContent?.trim() : undefined
           }));
         });
         return { type, fields };
@@ -335,7 +335,11 @@ export function extractionHandlers(ctx: HandlerContext): Record<string, Handler>
         }) as { title: string; text: string; url: string }[];
         const ADDRESS_RE = /\b\d{1,5}\s+(?:rue|avenue|av\.?|boulevard|bd\.?|place|chemin|impasse|route|quai|allée|allee|cours|square)\s+[A-Za-zÀ-ÿ0-9\s'’.-]+/i;
         const listings = raw.map((r) => {
-          const ratingMatch = r.text.match(/\b([0-5](?:[.,]\d)?)\s*(?:\(\s*([\d\s]+)\s*\)|(?:étoiles?|stars?)?)?/i);
+          // A rating needs context (decimal + review count, "/5", ★, "étoiles"/"stars");
+          // a bare digit (house number, postcode…) is not a rating.
+          const ratingMatch =
+            r.text.match(/(?:^|[^\d.,])([0-5][.,]\d)\s*(?:\(\s*[\d\s]+\)|★|\/\s*5\b|étoiles?|stars?)/i) ||
+            r.text.match(/(?:^|[^\d.,])([0-5](?:[.,]\d)?)\s*(?:★|\/\s*5\b|étoiles?|stars?)/i);
           const reviewsMatch = r.text.match(/(?:\(([\d\s]+)\)|([\d\s]+)\s+(?:avis|reviews?))/i);
           const hoursMatch = r.text.match(/\b(?:Ouvert|Fermé|Open|Closed)\b[^·\n]{0,80}/i);
           return {
@@ -481,12 +485,12 @@ export function extractionHandlers(ctx: HandlerContext): Record<string, Handler>
             const selector = id
               ? `${tag}#${CSS.escape(id)}`
               : aria
-                ? `${tag}[aria-label="${aria.replace(/"/g, '\\"').slice(0, 80)}"]`
+                ? `${tag}[aria-label${aria.length > 80 ? '^=' : '='}"${aria.slice(0, 80).replace(/["\\]/g, '\\$&')}"]`
                 : `${tag}${cls}`;
             const lines = filterLines
               ? raw.split(/\r?\n/).map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean).filter(line => filter ? filter.test(line) : matchesTerms(line))
               : [text];
-            for (const line of lines) out.push({
+            for (const line of lines.slice(0, limit - out.length)) out.push({
               text: line,
               tag,
               role: h.getAttribute('role') || '',

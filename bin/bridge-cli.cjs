@@ -13,21 +13,33 @@ const isFast = () => process.env.BRIDGE_SCRAPE_SPEED === 'fast';
 
 function send(ws, cmd) {
   return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      ws.off('message', handler);
+      ws.off('close', onClose);
+    };
+    const onClose = () => {
+      cleanup();
+      reject(new Error(`connection closed before reply to ${cmd.type}`));
+    };
     const handler = (data) => {
+      let msg;
       try {
-        const msg = JSON.parse(data.toString());
-        if (msg.type === 'human.feedback') {
-          process.stderr.write(JSON.stringify(msg.payload) + '\n');
-          return;
-        }
-        if (msg.id === cmd.id) {
-          ws.off('message', handler);
-          if (!msg.ok) reject(new Error(msg.error));
-          else resolve(msg.result);
-        }
-      } catch (e) {}
+        msg = JSON.parse(data.toString());
+      } catch (e) {
+        return;
+      }
+      if (msg.type === 'human.feedback') {
+        process.stderr.write(JSON.stringify(msg.payload) + '\n');
+        return;
+      }
+      if (msg.id === cmd.id) {
+        cleanup();
+        if (!msg.ok) reject(new Error(msg.error));
+        else resolve(msg.result);
+      }
     };
     ws.on('message', handler);
+    ws.on('close', onClose);
     ws.send(JSON.stringify(cmd));
   });
 }
@@ -46,16 +58,25 @@ async function connectOrStart() {
     return await connect();
   } catch (err) {
     if (err?.code !== 'ECONNREFUSED') throw err;
-    const serverCmd = isFast()
-      ? [path.resolve(__dirname, '..', 'dist', 'server.js')]
-      : ['node_modules/tsx/dist/cli.mjs', 'src/server.ts'];
+    // Resolve the server from the package root, not the caller's cwd: the
+    // published package ships dist/ only, and a dev checkout may run from src/.
+    const root = path.resolve(__dirname, '..');
+    const distServer = path.join(root, 'dist', 'server.js');
+    const srcServer = path.join(root, 'src', 'server.ts');
+    const tsxCli = path.join(root, 'node_modules', 'tsx', 'dist', 'cli.mjs');
+    const canRunSrc = fs.existsSync(srcServer) && fs.existsSync(tsxCli);
+    const useDist = fs.existsSync(distServer) && (isFast() || !canRunSrc);
+    if (!useDist && !canRunSrc) throw new Error('Cannot find the bridge server (run `npm run build` first)');
+    const serverCmd = useDist ? [distServer] : [tsxCli, srcServer];
     spawnedServer = spawn(process.execPath, serverCmd, {
-      cwd: isFast() ? undefined : process.cwd(),
+      cwd: process.cwd(),
       env: { ...process.env, BRIDGE_BRING_TO_FRONT: process.env.BRIDGE_BRING_TO_FRONT ?? '1' },
       stdio: ['ignore', 'ignore', 'ignore'],
       detached: process.platform !== 'win32',
       windowsHide: true,
     });
+    // Let the CLI exit once its command is done; the server keeps running.
+    spawnedServer.unref();
     for (let i = 0; i < 30; i++) {
       await new Promise((r) => setTimeout(r, 500));
       try { return await connect(); } catch {}
@@ -115,25 +136,41 @@ function printJson(data) {
   }
 }
 
+function csvCell(v) {
+  if (v === null || v === undefined) return '';
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+// Pick the record list out of a command result so CSV gets one row per item.
+function csvRecords(data) {
+  if (Array.isArray(data)) return data;
+  for (const key of ['results', 'items', 'listings', 'leads', 'emails', 'phones']) {
+    if (Array.isArray(data?.[key])) return data[key].map((v) => (v && typeof v === 'object' ? v : { [key.replace(/s$/, '')]: v }));
+  }
+  return [data];
+}
+
 function writeOut(data, opts, defaultExt = 'json') {
-  const fmt = opts.format || defaultExt;
   const filePath = opts.out;
+  const fmt = opts.format || (/\.csv$/i.test(filePath || '') ? 'csv' : defaultExt);
   if (!filePath) { printJson(data); return; }
   const resolved = path.resolve(filePath);
   if (fmt === 'csv') {
-    const headers = Object.keys(data);
-    const rows = Array.isArray(data) ? data : [data];
-    const lines = [headers.join(',')];
-    for (const row of rows) {
-      lines.push(headers.map(h => {
-        const v = row[h];
-        if (v === null || v === undefined) return '';
-        const s = String(v);
-        return s.includes(',') || s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s;
-      }).join(','));
+    let rows;
+    if (typeof data?.csv === 'string') {
+      fs.writeFileSync(resolved, data.csv, 'utf8');
+      rows = data.items ?? data.listings ?? [];
+    } else {
+      rows = csvRecords(data);
+      const headers = [...new Set(rows.flatMap((row) => Object.keys(row ?? {})))];
+      const lines = [headers.map(csvCell).join(',')];
+      for (const row of rows) lines.push(headers.map((h) => csvCell(row?.[h])).join(','));
+      fs.writeFileSync(resolved, lines.join('\n'), 'utf8');
     }
-    fs.writeFileSync(resolved, lines.join('\n'), 'utf8');
     process.stderr.write(`saved ${rows.length} records to ${resolved}\n`);
+    printJson({ saved: resolved, count: rows.length });
+    return;
   } else {
     fs.writeFileSync(resolved, JSON.stringify(data, null, 2), 'utf8');
     process.stderr.write(`saved to ${resolved}\n`);
@@ -141,18 +178,6 @@ function writeOut(data, opts, defaultExt = 'json') {
   printJson({ saved: resolved, count: Array.isArray(data) ? data.length : 1 });
 }
 
-function toCsvRows(items, columns) {
-  const header = columns.join(',');
-  const rows = items.map(item => {
-    return columns.map(c => {
-      const v = item[c];
-      if (v === null || v === undefined) return '';
-      const s = String(v);
-      return s.includes(',') || s.includes('"') ? '"' + s.replace(/"/g, '""') + '"' : s;
-    }).join(',');
-  });
-  return { header, rows };
-}
 
 function extractEmailsFromText(text) {
   const regex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
@@ -326,20 +351,16 @@ const commands = {
     const { opts, positional } = parseOpts(args);
     const type = positional[0] || 'article';
     const r = await send(ws, { id: 'ext', type: 'dom.extract', payload: { type, limit: opts.limit, format: opts.format } });
-    if (r && r.listings) {
-      if (opts.csv || opts.format === 'csv') {
-        const columns = ['name', 'price', 'location', 'summary', 'phone', 'website'];
-        const csv = toCsvRows(r.listings.map(l => ({
-          name: l.name || l.title || '',
-          price: l.price || '',
-          location: l.address || l.location || '',
-          summary: l.summary || '',
-          phone: l.phone || '',
-          website: l.website || l.url || '',
-        })), columns);
-        writeOut({ header: csv.header, rows: csv.rows, count: r.listings.length }, opts, 'csv');
-        return;
-      }
+    if (r && r.listings && (opts.format === 'csv' || /\.csv$/i.test(opts.out || ''))) {
+      writeOut(r.listings.map(l => ({
+        name: l.name || l.title || '',
+        price: l.price || '',
+        location: l.address || l.location || '',
+        summary: l.summary || '',
+        phone: l.phone || '',
+        website: l.website || l.url || '',
+      })), opts, 'csv');
+      return;
     }
     writeOut(r, opts);
   },
@@ -597,8 +618,7 @@ const commands = {
       if (opts.format === 'csv' || opts.out.endsWith('.csv')) {
         const csvLines = [`source,title,emails,phones`];
         for (const l of leads) {
-          const esc = (s) => (s || '').includes(',') ? `"${(s || '').replace(/"/g, '""')}"` : (s || '');
-          csvLines.push(`${esc(l.source)},${esc(l.title)},${esc(l.emails)},${esc(l.phones)}`);
+          csvLines.push([l.source, l.title, l.emails, l.phones].map(csvCell).join(','));
         }
         fs.writeFileSync(resolved, csvLines.join('\n'), 'utf8');
         process.stderr.write(`Saved CSV: ${resolved}\n`);

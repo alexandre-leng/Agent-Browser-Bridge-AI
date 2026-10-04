@@ -1,11 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { join, extname, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { WebSocketServer, WebSocket } from 'ws';
 import { buildHandlers } from '../browser/handlers/index.js';
 import { sessionStore, controller } from '../browser/controller.js';
 import { log } from '../logger.js';
-import { isLocalHost, requireBridgeToken, securityFromEnv } from '../browser/security.js';
+import { isLocalHost, isUpgradeAllowed, requireBridgeToken, securityFromEnv } from '../browser/security.js';
 import { scrubPayload } from '../browser/scrub.js';
 import { traces } from '../browser/traces.js';
 import { VERSION } from '../version.js';
@@ -55,6 +57,18 @@ function serveFile(baseDir: string, rawFile: string, res: ServerResponse): Promi
   })();
 }
 
+// The viewer HTML lives in src/viewer. Resolve it relative to this module so the
+// server works from any cwd (and from dist/), falling back to the cwd layout.
+function findViewerDir(): string {
+  const here = fileURLToPath(new URL('.', import.meta.url));
+  const candidates = [
+    resolve(here, '..', 'viewer'),
+    resolve(here, '..', '..', 'src', 'viewer'),
+    resolve(process.cwd(), 'src', 'viewer'),
+  ];
+  return candidates.find((dir) => existsSync(join(dir, 'index.html'))) ?? candidates[candidates.length - 1];
+}
+
 export function scrubError(err: unknown): { message: string; code: string } {
   const raw = (err as any)?.message ?? String(err);
   const firstLine = String(raw).split('\n')[0].slice(0, 300);
@@ -70,13 +84,13 @@ export function startServer(port = 8080) {
   };
   const handlers: Record<string, any> = {};
   const dispatch = async (type: string, payload: any) => {
-    const h = handlers[type];
+    const h = Object.hasOwn(handlers, type) ? handlers[type] : undefined;
     if (!h) throw new Error(`unknown command: ${type}`);
     return h(payload);
   };
   Object.assign(handlers, buildHandlers(broadcast, dispatch));
 
-  const viewerDir = resolve(process.cwd(), 'src', 'viewer');
+  const viewerDir = findViewerDir();
   const capturesDir = resolve(process.cwd(), 'logs', 'screenshots');
 
   const http = createServer(async (req: IncomingMessage, res: ServerResponse) => {
@@ -136,7 +150,7 @@ export function startServer(port = 8080) {
     path: '/ws/browser-bridge',
     verifyClient: (info, done) => {
       const origin = info.origin ?? '';
-      if (ALLOWED_ORIGINS.length > 0 && origin && !ALLOWED_ORIGINS.includes(origin)) {
+      if (!isUpgradeAllowed(origin, info.req.headers.host, SECURITY)) {
         log('warn', 'ws rejected: origin', { origin });
         return done(false, 403, 'origin not allowed');
       }
@@ -168,6 +182,18 @@ export function startServer(port = 8080) {
       clientLimits.delete(ws);
     });
     ws.on('message', async (raw) => {
+      let msg: any;
+      try {
+        msg = JSON.parse(raw.toString());
+      } catch {
+        ws.send(JSON.stringify({ ok: false, error: 'invalid json' }));
+        return;
+      }
+      if (!msg || typeof msg !== 'object' || Array.isArray(msg)) {
+        ws.send(JSON.stringify({ ok: false, error: 'message must be a JSON object' }));
+        return;
+      }
+      const { id, type, payload } = msg;
       const limit = clientLimits.get(ws);
       const now = Date.now();
       if (limit) {
@@ -177,21 +203,17 @@ export function startServer(port = 8080) {
         }
         limit.count++;
         if (limit.count > 100) {
-          ws.send(JSON.stringify({ ok: false, error: 'rate limited' }));
+          ws.send(JSON.stringify({ id, type, ok: false, error: 'rate limited' }));
           return;
         }
       }
-      let msg: any;
-      try {
-        msg = JSON.parse(raw.toString());
-      } catch {
-        ws.send(JSON.stringify({ ok: false, error: 'invalid json' }));
+      if (payload !== undefined && payload !== null && (typeof payload !== 'object' || Array.isArray(payload))) {
+        ws.send(JSON.stringify({ id, type, ok: false, error: 'payload must be an object' }));
         return;
       }
-      const { id, type, payload } = msg;
       const sessionId = payload?.sessionId || 'default';
       const t0 = Date.now();
-      const handler = handlers[type];
+      const handler = typeof type === 'string' && Object.hasOwn(handlers, type) ? handlers[type] : undefined;
       if (!handler) {
         log('warn', 'unknown command', { sessionId, cmd: type });
         ws.send(JSON.stringify({ id, ok: false, error: `unknown command: ${type}` }));

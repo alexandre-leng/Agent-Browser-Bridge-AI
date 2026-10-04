@@ -8,6 +8,9 @@ export class VisionStream {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private lastHash: string | null = null;
+  // Bumped on every start/stop so a tick still awaiting a screenshot from a
+  // previous stream cannot reschedule itself into the new one.
+  private generation = 0;
 
   // CSS dimensions only change on resize / navigation. Cache them and invalidate
   // via page events instead of re-evaluating on every frame (1 IPC saved per tick).
@@ -24,6 +27,8 @@ export class VisionStream {
     options: { annotate?: boolean } = {}
   ) {
     this.stop();
+    const gen = ++this.generation;
+    const alive = () => this.running && this.generation === gen;
     const interval = Math.max(100, Math.round(1000 / Math.max(0.5, fps)));
     this.running = true;
     this.lastHash = null;
@@ -50,13 +55,14 @@ export class VisionStream {
     };
 
     const tick = async () => {
-      if (!this.running) return;
+      if (!alive()) return;
       try {
         if (!page.isClosed()) {
           const buf = await page.screenshot({ type: 'jpeg', quality: 60, fullPage: false });
           const hash = crypto.createHash('md5').update(buf).digest('hex');
+          if (!alive()) return;
           if (hash === this.lastHash) {
-            if (this.running) this.timer = setTimeout(tick, interval);
+            this.timer = setTimeout(tick, interval);
             return;
           }
           this.lastHash = hash;
@@ -69,6 +75,7 @@ export class VisionStream {
             elements = await collectElements(page);
           }
 
+          if (!alive()) return;
           onFrame(buf.toString('base64'), {
             w: vp?.width ?? dims.cssW,
             h: vp?.height ?? dims.cssH,
@@ -82,13 +89,14 @@ export class VisionStream {
       } catch {
         // swallow — next tick may succeed
       }
-      if (this.running) this.timer = setTimeout(tick, interval);
+      if (alive()) this.timer = setTimeout(tick, interval);
     };
     tick();
   }
 
   stop() {
     this.running = false;
+    this.generation++;
     if (this.timer) clearTimeout(this.timer);
     this.timer = null;
     if (this.invalidateDims) this.invalidateDims();

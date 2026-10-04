@@ -42,6 +42,9 @@ export function inputHandlers(ctx: HandlerContext): Record<string, Handler> {
       return { ok: true };
     },
     'viewport.set': async ({ width, height }) => {
+      if (!Number.isFinite(width) || !Number.isFinite(height)) {
+        throw new Error('viewport.set: width and height must be finite numbers');
+      }
       const page = await ctx.p();
       const w = Math.max(320, Math.min(4096, Math.round(width)));
       const h = Math.max(240, Math.min(4096, Math.round(height)));

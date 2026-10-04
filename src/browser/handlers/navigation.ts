@@ -10,6 +10,13 @@ export const SEARCH_URLS: Record<string, (q: string) => string> = {
   duckduckgo: (q) => `https://duckduckgo.com/?q=${encodeURIComponent(q)}`,
 };
 
+export function searchUrl(engine: unknown, query: unknown, cmd = 'search'): string {
+  const name = String(engine ?? 'google');
+  if (!Object.hasOwn(SEARCH_URLS, name)) throw new Error(`${cmd}: unsupported engine "${name}" (use ${ENGINES.join(', ')})`);
+  if (typeof query !== 'string' || !query.trim()) throw new Error(`${cmd}: query is required`);
+  return SEARCH_URLS[name](query);
+}
+
 export function navigationHandlers(ctx: HandlerContext): Record<string, Handler> {
   return {
     navigate: async (payload: any) => {
@@ -34,11 +41,11 @@ export function navigationHandlers(ctx: HandlerContext): Record<string, Handler>
         engine: { type: 'string', enum: ENGINES },
         query: { type: 'string', required: true, min: 1, max: 500 },
       }, 'search');
-      const engine = payload.engine ?? 'google';
+      const url = searchUrl(payload.engine, payload.query);
       const page = await ctx.p();
-      const url = SEARCH_URLS[engine]?.(payload.query);
-      if (!url) throw new Error(`unknown engine: ${engine}`);
-      await politeGoto(page, url, { waitUntil: 'domcontentloaded' });
+      // This command exists to open a search engine results page, so the
+      // "direct app search" guard must not block it.
+      await politeGoto(page, url, { waitUntil: 'domcontentloaded', allowDirectSearch: true });
       return { url: page.url(), title: await page.title() };
     },
 

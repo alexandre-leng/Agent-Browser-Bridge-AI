@@ -28,7 +28,8 @@ function parseOptionValue(args: string[], name: string) {
 }
 
 export function parseInstallArgs(args: string[]) {
-  const targets = args.filter(arg => !arg.startsWith('--')) as InstallTarget[];
+  // Skip option flags and the value that follows a space-separated `--workspace`.
+  const targets = args.filter((arg, i) => !arg.startsWith('--') && args[i - 1] !== '--workspace') as InstallTarget[];
   const target = targets[0];
   const validTargets = new Set(['openclaw', 'hermes', 'all']);
   if (!target || !validTargets.has(target)) {
@@ -73,7 +74,7 @@ function skillContent(target: InstallTarget) {
 
   return `---
 name: ${SKILL_NAME}
-    description: Control a local browser through AgentBridge using CLI scripts, numerical page refs, and DOM-first extraction.
+description: Control a local browser through AgentBridge using CLI scripts, numerical page refs, and DOM-first extraction.
 version: 1.0.0
 platforms: [linux, macos, windows]
 ${metadata}

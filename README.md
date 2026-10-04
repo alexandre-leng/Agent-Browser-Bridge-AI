@@ -393,7 +393,7 @@ Returns `{ results: [{step, ok, type, result|error}, ...], durationMs, stepsExec
 | `BRIDGE_HUMAN_CONSULT_SPEED` | Initial multiplier for human consultation pauses | `BRIDGE_DEMO_SPEED` or `1` |
 | `BRIDGE_DEMO_SPEED` | General multiplier for demo movement/pause timing | `1` |
 | `BRIDGE_VISIBLE_CURSOR` | Show injected visible cursor (`0` disables) | `1` |
-| `BRIDGE_ALLOWED_ORIGINS` | CSV of allowed `Origin` headers | *(any)* |
+| `BRIDGE_ALLOWED_ORIGINS` | CSV of allowed `Origin` headers | *(same-origin viewer + non-browser clients only)* |
 | `BRIDGE_DEFAULT_TIMEOUT_MS` | Default Playwright timeout | `15000` |
 | `BRIDGE_DEFAULT_NAV_TIMEOUT_MS` | Default navigation timeout | `20000` |
 | `BRIDGE_LOG_JSON` | Emit logs as JSON if `1` | `0` |

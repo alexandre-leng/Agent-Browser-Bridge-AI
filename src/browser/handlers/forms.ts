@@ -143,6 +143,7 @@ async function setFieldValue(page: Page, field: FillField, clearFirst: boolean) 
   const info = await loc.evaluate((el: Element) => ({
     tag: el.tagName.toLowerCase(),
     type: (el as HTMLInputElement).type || el.tagName.toLowerCase(),
+    name: (el as HTMLInputElement).name || '',
   }));
 
   if (info.tag === 'select') {
@@ -155,7 +156,11 @@ async function setFieldValue(page: Page, field: FillField, clearFirst: boolean) 
   }
   if (info.type === 'radio') {
     if (typeof value === 'boolean') await loc.setChecked(value);
-    else await page.locator(`input[type="radio"][value="${String(value).replace(/"/g, '\\"')}"]`).first().setChecked(true);
+    else {
+      // Stay inside the matched radio group: the same value often exists in other groups.
+      const group = info.name ? `[name=${JSON.stringify(info.name)}]` : '';
+      await page.locator(`input[type="radio"]${group}[value=${JSON.stringify(String(value))}]`).first().setChecked(true);
+    }
     return { action: 'radio' };
   }
   if (info.type === 'file') {
